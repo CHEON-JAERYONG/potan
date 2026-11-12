@@ -184,6 +184,7 @@
         for (let x = x0; x <= x1; x++) { const u = (x - cx) / wd; hs[x] -= amp * Math.exp(-u * u); }
       }
       for (let x = 0; x < W; x++) hs[x] = clamp(hs[x], H * 0.34, H * 0.86);
+      this.base = hs;
       for (let x = 0; x < W; x++) {
         const top = Math.round(hs[x]);
         for (let y = top; y < H; y++) m[y * W + x] = 1;
@@ -272,9 +273,6 @@
       if (this.ctx) {
         const c = this.ctx;
         c.save();
-        c.globalCompositeOperation = 'source-atop';
-        c.fillStyle = soft ? 'rgba(30,14,4,0.22)' : 'rgba(30,14,4,0.5)';
-        c.beginPath(); c.arc(cx, cy, r + (soft ? 2 : 6), 0, Math.PI * 2); c.fill();
         c.globalCompositeOperation = 'destination-out';
         c.beginPath(); c.arc(cx, cy, r, 0, Math.PI * 2); c.fill();
         c.restore();
@@ -375,7 +373,6 @@
       const dist = t.y - t.fallFrom;
       t.falling = false; t.vy = 0;
       if (this.hooks && this.hooks.land) this.hooks.land(t, dist);
-      if (dist > 45) this.hurt(t, Math.min(30, Math.round((dist - 45) * 0.12)), 'fall');
     }
     stepX(t, dir) {
       const T = this.terrain, nx = t.x + dir;

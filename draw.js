@@ -460,10 +460,22 @@
         }
         ctx.lineTo(cw, ch); ctx.closePath(); ctx.fill();
       }
+      // 원래 땅이 있던 자리는 먼 산을 지우고 하늘만 → 폭발 구멍이 확실히 뚫려 보이게
+      const T = w.terrain;
+      if (T.base) {
+        const B = T.base, step = 6 * this.dpr;
+        ctx.beginPath(); ctx.moveTo(0, ch);
+        for (let sx = 0; sx <= cw + step; sx += step) {
+          const wx = Math.floor((sx - shx) / z + cam.x);
+          const wy = wx >= 0 && wx < w.W ? B[wx] + 3 : w.H + 2000;
+          ctx.lineTo(sx, (wy - cam.y) * z + shy);
+        }
+        ctx.lineTo(cw + step, ch); ctx.closePath();
+        ctx.fillStyle = this.skyGrad; ctx.fill();
+      }
 
       // 2) 월드
       ctx.setTransform(z, 0, 0, z, -cam.x * z + shx, -cam.y * z + shy);
-      const T = w.terrain;
       {
         const x0 = Math.max(0, Math.floor(cam.x - 20)), y0 = Math.max(0, Math.floor(cam.y - 20));
         const x1 = Math.min(w.W, Math.ceil(cam.x + this.vw + 20)), y1 = Math.min(w.H, Math.ceil(cam.y + this.vh + 20));
