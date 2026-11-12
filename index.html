@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>포탄대작전</title>
+<meta name="description" content="링크 하나로 친구와 바로 붙는 턴제 탱크 포격전. 가입·설치·비용 없음.">
+<meta name="theme-color" content="#141c3a">
+<meta property="og:type" content="website">
+<meta property="og:title" content="포탄대작전 — 한 판 붙자! 💣">
+<meta property="og:description" content="링크를 누르면 바로 탱크 대전 — 가입·설치 없음">
+<meta property="og:image" content="https://cheon-jaeryong.github.io/potan/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Jua&display=swap">
+<link rel="stylesheet" href="style.css?v=1.0.0">
+</head>
+<body>
+<canvas id="bg"></canvas>
+<div id="bgShade"></div>
+
+<!-- ===== 처음 화면 ===== -->
+<main id="home" class="screen">
+  <header class="logo">
+    <div class="logo-main"><span class="l1">포탄</span><span class="l2">대작전</span></div>
+    <div class="logo-sub">친구랑 링크 하나로 붙는 턴제 탱크 포격전</div>
+  </header>
+
+  <section class="panel">
+    <div id="inviteBox" class="invite" hidden>📨 초대받은 방 <b id="inviteCode"></b> — 이름이랑 탱크를 고르고 입장하세요!</div>
+    <label class="field">
+      <span>내 탱크 이름 <small>(게임 안에서 탱크 위에 표시돼요)</small></span>
+      <input id="nick" maxlength="8" placeholder="닉네임 (최대 8자)" autocomplete="nickname" enterkeyhint="done">
+    </label>
+    <div class="sub">탱크 고르기</div>
+    <div id="tankGrid" class="tank-grid"></div>
+    <div class="sub">색깔</div>
+    <div id="colorRow" class="color-row"></div>
+    <div class="actions">
+      <button id="btnJoin" class="btn big gold" hidden>🚀 방 입장하기</button>
+      <button id="btnCreate" class="btn big gold">🌐 친구와 온라인 대전 (방 만들기)</button>
+      <button id="btnPractice" class="btn big">🤖 컴퓨터와 연습하기</button>
+    </div>
+  </section>
+
+  <section class="panel howto">
+    <div class="sub">조작법</div>
+    <div class="keys">
+      <div><kbd>←</kbd><kbd>→</kbd> 이동 (턴마다 이동 게이지만큼)</div>
+      <div><kbd>↑</kbd><kbd>↓</kbd> 각도 조절 (꾹 누르면 빠르게)</div>
+      <div><kbd>Space</kbd> 꾹 눌러 파워 모으기 → 떼면 발사!</div>
+      <div><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 무기 선택 (3번은 필살기 — 게이지가 차면)</div>
+      <div><kbd>Z</kbd><kbd>X</kbd><kbd>C</kbd><kbd>V</kbd> 아이템 (회복 · 2연발 · 강화탄 · 무풍)</div>
+      <div><kbd>Enter</kbd> 채팅 · 마우스 드래그로 화면 둘러보기 · 휠로 확대/축소</div>
+    </div>
+    <p class="tip">💡 바람 방향을 꼭 보세요! 지난번 파워는 파워 게이지에 빨간 선으로 남아요. 물에 빠지면 바로 탈락!</p>
+  </section>
+  <footer class="foot">가입 · 설치 · 비용 없음 — 공개 중계 서버 2곳을 통해 친구와 연결돼요 · <span id="ver"></span></footer>
+</main>
+
+<!-- ===== 대기실 ===== -->
+<main id="room" class="screen" hidden>
+  <div class="room-head">
+    <button id="btnLeaveRoom" class="btn small">← 나가기</button>
+    <div class="room-title"><span id="roomLabel">대기실</span> <span id="roomCode" class="code"></span></div>
+    <div id="netState" class="net"></div>
+  </div>
+
+  <section id="shareBox" class="panel share">
+    <div class="share-t">👇 이 링크를 친구에게 카톡으로 보내세요. 누르면 바로 이 방으로 들어와요!</div>
+    <div class="share-row">
+      <input id="shareUrl" readonly>
+      <button id="btnCopy" class="btn gold">복사</button>
+      <button id="btnShare" class="btn">공유</button>
+    </div>
+  </section>
+
+  <div id="joinWait" class="panel joinwait" hidden>
+    <div class="spinner"></div>
+    <div id="joinWaitTxt">방에 연결하는 중…</div>
+    <button id="btnTakeRoom" class="btn gold" hidden>이 방 코드로 새로 방 만들기</button>
+  </div>
+
+  <div class="room-grid">
+    <section class="panel">
+      <div class="sub">참가자 <span id="pCount" class="muted"></span></div>
+      <ul id="pList" class="plist"></ul>
+      <div id="botRow" class="bot-row">
+        <span>컴퓨터 추가</span>
+        <button class="btn small" data-bot="easy">🐣 쉬움</button>
+        <button class="btn small" data-bot="normal">🙂 보통</button>
+        <button class="btn small" data-bot="hard">😈 어려움</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="sub">게임 설정 <small id="setHint" class="muted"></small></div>
+      <div class="set"><span>맵</span><select id="setTheme"></select></div>
+      <div class="set"><span>모드</span><div class="seg" id="setMode"><button data-v="ffa">개인전</button><button data-v="team">팀전</button></div></div>
+      <div class="set"><span>턴 시간</span><div class="seg" id="setTime"><button data-v="20">20초</button><button data-v="30">30초</button><button data-v="45">45초</button></div></div>
+      <div id="myTeamRow" class="set" hidden><span>내 팀</span><div class="seg" id="myTeam"><button data-v="1">🔴 레드</button><button data-v="2">🔵 블루</button></div></div>
+      <div class="sub">내 탱크 <small class="muted">— 바꾸면 바로 반영돼요</small></div>
+      <div id="roomTankGrid" class="tank-grid mini"></div>
+      <div id="roomColorRow" class="color-row"></div>
+    </section>
+
+    <section class="panel chat">
+      <div class="sub">채팅</div>
+      <div id="roomMsgs" class="msgs"></div>
+      <form id="roomChatForm" class="chat-row"><input id="roomChatIn" maxlength="60" placeholder="메시지 입력" autocomplete="off"><button class="btn">전송</button></form>
+    </section>
+  </div>
+
+  <div class="room-foot">
+    <button id="btnStart" class="btn big gold">🔥 게임 시작!</button>
+    <div id="waitHost" class="wait" hidden>방장이 게임을 시작하길 기다리는 중…</div>
+  </div>
+</main>
+
+<!-- ===== 게임 ===== -->
+<main id="game" class="screen" hidden>
+  <canvas id="cv"></canvas>
+
+  <div id="topbar">
+    <div class="tb-left">
+      <div id="timer" class="timer"><b id="timerTxt">30</b></div>
+      <div id="turnInfo" class="turninfo"></div>
+    </div>
+    <div class="wind">
+      <div class="wind-label">바람</div>
+      <div class="wind-bar"><div id="windFill" class="wind-fill"></div><div class="wind-mid"></div></div>
+      <div id="windTxt" class="wind-txt">0</div>
+    </div>
+    <div class="tb-right">
+      <canvas id="mini"></canvas>
+      <div class="tb-btns">
+        <button id="btnSound" class="ibtn" title="소리">🔊</button>
+        <button id="btnChat" class="ibtn" title="채팅 (Enter)">💬</button>
+        <button id="btnExit" class="ibtn" title="나가기">✕</button>
+      </div>
+    </div>
+  </div>
+
+  <ul id="gList" class="glist"></ul>
+  <div id="banner" class="banner"></div>
+  <div id="chatLog" class="chatlog"></div>
+  <form id="chatForm" class="chatform" hidden><input id="chatIn" maxlength="60" placeholder="메시지 입력 후 Enter (Esc 닫기)" autocomplete="off"></form>
+  <div id="rotateHint" class="rotate-hint" hidden>📱 휴대폰을 가로로 돌리면 더 넓게 보여요</div>
+
+  <div id="hud">
+    <div class="h-me">
+      <canvas id="meIcon"></canvas>
+      <div class="h-me-txt">
+        <div id="meName" class="h-name"></div>
+        <div class="bar hp"><i id="meHp"></i><span id="meHpTxt"></span></div>
+        <div class="bar fuel"><i id="meFuel"></i><span>이동</span></div>
+      </div>
+    </div>
+    <div class="h-angle">
+      <div class="dial"><i id="angNeedle"></i></div>
+      <div class="h-val"><small>각도</small><b id="angTxt">45°</b></div>
+    </div>
+    <div class="h-power">
+      <div class="pw-top"><small>파워</small><b id="pwTxt">0</b></div>
+      <div class="pw-bar"><div id="pwFill" class="pw-fill"></div><div id="pwLast" class="pw-last"></div><div class="pw-ticks"></div></div>
+    </div>
+    <div class="h-weapons" id="weapons"></div>
+    <div class="h-items" id="items"></div>
+  </div>
+
+  <div id="touch" class="touch">
+    <div class="t-left"><button data-k="left">◀</button><button data-k="right">▶</button></div>
+    <div class="t-right">
+      <div class="t-ang"><button data-k="up">▲</button><button data-k="down">▼</button></div>
+      <button data-k="fire" class="t-fire">발사</button>
+    </div>
+  </div>
+
+  <div id="over" class="over" hidden>
+    <div class="over-card">
+      <div id="overTitle" class="over-title"></div>
+      <canvas id="overTank" class="over-tank"></canvas>
+      <table class="rank"><thead><tr><th>순위</th><th></th><th>이름</th><th>입힌 피해</th><th>K.O.</th></tr></thead><tbody id="overRank"></tbody></table>
+      <div class="over-btns">
+        <button id="btnAgain" class="btn big gold">🔁 한 판 더!</button>
+        <button id="btnToRoom" class="btn">대기실로</button>
+        <button id="btnOverExit" class="btn">나가기</button>
+      </div>
+      <div id="overWait" class="wait"></div>
+    </div>
+  </div>
+</main>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="vendor/mqtt.min.js"></script>
+<script src="engine.js?v=1.0.0"></script>
+<script src="draw.js?v=1.0.0"></script>
+<script src="app.js?v=1.0.0"></script>
+</body>
+</html>
