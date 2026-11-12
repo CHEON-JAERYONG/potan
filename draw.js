@@ -253,6 +253,7 @@
       const w = Math.max(1, Math.round(r.width * this.dpr)), h = Math.max(1, Math.round(r.height * this.dpr));
       if (this.cv.width !== w || this.cv.height !== h) { this.cv.width = w; this.cv.height = h; }
       this.baseZ = Math.min(h / 730, w / 760);
+      if (h > w * 1.1) this.baseZ = Math.min(h / 730, w / 480);   // 휴대폰 세로: 좀 더 크게
       this.baseZ = Math.max(0.3, this.baseZ);
       this.skyGrad = null;
     }

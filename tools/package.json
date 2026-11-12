@@ -1,0 +1,6 @@
+{
+  "name": "potan-battle-tools",
+  "private": true,
+  "description": "포탄대작전 브라우저 자동 테스트 (설치된 크롬을 그대로 씀)",
+  "dependencies": { "playwright-core": "^1.49.1" }
+}

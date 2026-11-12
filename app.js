@@ -3,7 +3,7 @@
 (function () {
   'use strict';
   const E = window.Engine, D = window.Draw, C = E.C;
-  const VERSION = '1.0.1';
+  const VERSION = '1.1.0';
   const TOPIC_ROOT = 'potan-battle/v1/';
   const BROKERS = [
     { url: 'wss://broker.emqx.io:8084/mqtt' },
@@ -640,6 +640,7 @@
     const mine = isMine(t);
     banner(mine ? '내 차례!' : t.name + ' 차례', mine, G.turnNo >= G.sdTurn ? '🌊 물이 차오르는 중!' : '');
     Sfx.play(mine ? 'myturn' : 'turn');
+    if (mine) buzz([35, 70, 35]);
     bot = (t.bot && isHost()) ? { t, stage: 0, at: now() + 900 + Math.random() * 700 } : null;
     hudDirty = true;
     processQueue();
@@ -765,7 +766,7 @@
   function fireNow() {
     const t = curTank();
     if (!isMine(t) || aim.sent || phase !== 'aim' || !t.alive) return;
-    aim.charging = false; Sfx.charge(-1);
+    aim.charging = false; Sfx.charge(-1); buzz(25);
     shoot(t, { x: t.x, y: t.y, f: t.facing, a: t.angle, p: Math.max(1, Math.round(aim.power * 10) / 10), w: aim.weapon, item: aim.item });
   }
   function sendPass(t, why) {
@@ -966,11 +967,13 @@
     setStyle('meHp', 'background', t.hp > 60 ? '#4ddc6a' : t.hp > 30 ? '#ffc93d' : '#ff4d4d');
     setText('meHpTxt', t.hp + ' / 100');
     setStyle('meFuel', 'width', Math.max(0, t.fuel / C.MOVE_MAX * 100) + '%');
+    setStyle('tFuel', 'width', Math.max(0, t.fuel / C.MOVE_MAX * 100) + '%');
     setText('angTxt', t.angle + '°');
     setStyle('angNeedle', 'transform', 'rotate(' + (t.facing > 0 ? -t.angle : -(180 - t.angle)) + 'deg)');
     const pw = isMine(t) ? (aim.charging ? aim.power : -1) : live.power;
     setText('pwTxt', pw >= 0 ? pw.toFixed(1) : (t.lastPower != null ? '지난 ' + t.lastPower : '0'));
     setStyle('pwFill', 'width', Math.max(0, pw) + '%');
+    if (hudCache.tpw !== pw) { hudCache.tpw = pw; $('tFire').style.setProperty('--pw', Math.max(0, pw)); }
     if (t.lastPower != null) { setStyle('pwLast', 'display', 'block'); setStyle('pwLast', 'left', 'calc(' + t.lastPower + '% - 1px)'); }
     else setStyle('pwLast', 'display', 'none');
     const wsel = isMine(t) ? aim.weapon : live.weapon, isel = isMine(t) ? aim.item : live.item;
@@ -1061,6 +1064,7 @@
     for (const s of ['home', 'room', 'game']) $(s).hidden = s !== id;
     document.body.classList.toggle('in-game', id === 'game');
     window.scrollTo(0, 0);
+    if (id === 'game') lockLandscape(); else unlockOrientation();
   }
   function showHome() {
     showScreen('home');
@@ -1085,6 +1089,7 @@
     showScreen('game');
     demoStop();
     hudCache = {}; hudDirty = true;
+    hintUntil = Date.now() + 9000; setTimeout(layout, 9100);
     $('chatForm').hidden = true;
     layout();
     const t = curTank();
@@ -1094,11 +1099,36 @@
   function layout() {
     if (!rd) return;
     rd.resize();
-    rd.hudPx = $('hud').offsetHeight * rd.dpr;
+    const hh = $('hud').offsetHeight;
+    rd.hudPx = hh * rd.dpr;
     rd.topPx = 66 * rd.dpr;
-    $('rotateHint').hidden = !(innerHeight > innerWidth && screen === 'game');
+    document.documentElement.style.setProperty('--hudH', hh + 'px');
+    $('rotateHint').hidden = !(innerHeight > innerWidth && screen === 'game' && Date.now() < hintUntil && !document.fullscreenElement);
   }
   window.addEventListener('resize', () => { layout(); if (demo.rd) demo.rd.resize(); });
+  if (window.ResizeObserver) new ResizeObserver(() => { if (screen === 'game') layout(); }).observe($('hud'));
+
+  /* ================= 모바일: 전체화면 · 가로 고정 · 진동 ================= */
+  let hintUntil = 0;
+  const TOUCH = matchMedia('(pointer: coarse)').matches;
+  const CAN_FULL = !!(document.documentElement.requestFullscreen && document.fullscreenEnabled);
+  const APP_MODE = matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches;
+  function lockLandscape() {
+    if (!TOUCH || !(document.fullscreenElement || APP_MODE)) return;
+    try { const o = window.screen.orientation; if (o && o.lock) o.lock('landscape').catch(() => { }); } catch (e) { }
+  }
+  function unlockOrientation() { try { const o = window.screen.orientation; if (o && o.unlock) o.unlock(); } catch (e) { } }
+  function toggleFull() {
+    if (!CAN_FULL) return;
+    if (document.fullscreenElement) { document.exitFullscreen().catch(() => { }); return; }
+    document.documentElement.requestFullscreen({ navigationUI: 'hide' }).then(() => { if (screen === 'game') lockLandscape(); }).catch(() => { });
+  }
+  document.addEventListener('fullscreenchange', () => { $('btnFull').textContent = document.fullscreenElement ? '🗗' : '⛶'; setTimeout(layout, 120); });
+  $('btnFull').hidden = !(TOUCH && CAN_FULL);
+  $('btnFull').onclick = () => toggleFull();
+  $('rotateHint').textContent = CAN_FULL ? '📱 눌러서 가로 전체화면으로 하기' : '📱 휴대폰을 가로로 돌리면 더 넓게 보여요';
+  $('rotateHint').onclick = () => { hintUntil = 0; layout(); toggleFull(); };
+  function buzz(p) { if (!TOUCH || Sfx.isMuted()) return; try { navigator.vibrate && navigator.vibrate(p); } catch (e) { } }
 
   /* ================= 첫 화면 배경: 컴퓨터끼리 싸우는 데모 ================= */
   const demo = { rd: null, world: null, sim: null, next: 0, idx: 0, on: false };
@@ -1244,15 +1274,24 @@
   }
   // 화면 끌어서 둘러보기 · 휠 확대
   (() => {
-    const cv = $('cv'); let drag = null;
-    cv.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, id: e.pointerId }; cv.classList.add('drag'); try { cv.setPointerCapture(e.pointerId); } catch (x) { } });
+    const cv = $('cv'); let drag = null, pinch = null;
+    const pts = new Map();
+    const span = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y) || 1; };
+    cv.addEventListener('pointerdown', e => {
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      try { cv.setPointerCapture(e.pointerId); } catch (x) { }
+      if (pts.size === 2 && rd) { pinch = { d: span(), m: rd.zoomMul }; drag = null; return; }
+      drag = { x: e.clientX, y: e.clientY, id: e.pointerId }; cv.classList.add('drag');
+    });
     cv.addEventListener('pointermove', e => {
+      if (pts.has(e.pointerId)) pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pinch && pts.size >= 2 && rd) { rd.zoomMul = E.clamp(pinch.m * span() / pinch.d, 0.5, 1.5); return; }
       if (!drag || e.pointerId !== drag.id || !rd) return;
       const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
       if (Math.abs(dx) + Math.abs(dy) < 2) return;
       rd.panBy(dx * rd.dpr, dy * rd.dpr); drag.x = e.clientX; drag.y = e.clientY;
     });
-    const end = () => { drag = null; cv.classList.remove('drag'); };
+    const end = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; if (!pts.size) { drag = null; cv.classList.remove('drag'); } };
     cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
     cv.addEventListener('dblclick', () => { if (rd) rd.free = false; });
     cv.addEventListener('wheel', e => { e.preventDefault(); if (rd) rd.zoomMul = E.clamp(rd.zoomMul * (e.deltaY > 0 ? 0.9 : 1.1), 0.5, 1.5); }, { passive: false });

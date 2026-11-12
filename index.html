@@ -14,10 +14,15 @@
 <meta property="og:image:height" content="630">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="포탄대작전">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Jua&display=swap">
-<link rel="stylesheet" href="style.css?v=1.0.1">
+<link rel="stylesheet" href="style.css?v=1.1.0">
 </head>
 <body>
 <canvas id="bg"></canvas>
@@ -141,6 +146,7 @@
         <button id="btnSound" class="ibtn" title="소리">🔊</button>
         <button id="btnChat" class="ibtn" title="채팅 (Enter)">💬</button>
         <button id="btnExit" class="ibtn" title="나가기">✕</button>
+        <button id="btnFull" class="ibtn" title="전체화면" hidden>⛶</button>
       </div>
     </div>
   </div>
@@ -149,7 +155,7 @@
   <div id="banner" class="banner"></div>
   <div id="chatLog" class="chatlog"></div>
   <form id="chatForm" class="chatform" hidden><input id="chatIn" maxlength="60" placeholder="메시지 입력 후 Enter (Esc 닫기)" autocomplete="off"></form>
-  <div id="rotateHint" class="rotate-hint" hidden>📱 휴대폰을 가로로 돌리면 더 넓게 보여요</div>
+  <button id="rotateHint" class="rotate-hint" hidden>📱 휴대폰을 가로로 돌리면 더 넓게 보여요</button>
 
   <div id="hud">
     <div class="h-me">
@@ -173,10 +179,13 @@
   </div>
 
   <div id="touch" class="touch">
-    <div class="t-left"><button data-k="left">◀</button><button data-k="right">▶</button></div>
+    <div class="t-left">
+      <div class="t-move"><button data-k="left">◀</button><button data-k="right">▶</button></div>
+      <div class="t-fuel" title="이동 게이지"><i id="tFuel"></i></div>
+    </div>
     <div class="t-right">
       <div class="t-ang"><button data-k="up">▲</button><button data-k="down">▼</button></div>
-      <button data-k="fire" class="t-fire">발사</button>
+      <button data-k="fire" id="tFire" class="t-fire">발사</button>
     </div>
   </div>
 
@@ -198,8 +207,8 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/mqtt.min.js"></script>
-<script src="engine.js?v=1.0.1"></script>
-<script src="draw.js?v=1.0.1"></script>
-<script src="app.js?v=1.0.1"></script>
+<script src="engine.js?v=1.1.0"></script>
+<script src="draw.js?v=1.1.0"></script>
+<script src="app.js?v=1.1.0"></script>
 </body>
 </html>

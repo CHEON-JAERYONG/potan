@@ -300,3 +300,108 @@ kbd { display: inline-block; min-width: 26px; text-align: center; padding: 2px 6
   .touch button { width: 50px; height: 50px; font-size: 19px; }
   .touch .t-fire { width: 74px; height: 74px; }
 }
+
+/* ================= 모바일 최적화 (v1.1) ================= */
+body { overscroll-behavior: none; }
+#game, #game button, .touch button { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.rotate-hint { border: 0; color: #fff; font-family: var(--font); }
+
+@media (pointer: coarse) {
+  /* 노치·홈바 안전 영역 */
+  #topbar { padding: calc(6px + env(safe-area-inset-top)) calc(8px + env(safe-area-inset-right)) 6px calc(8px + env(safe-area-inset-left)); }
+  #hud { padding-left: calc(6px + env(safe-area-inset-left)); padding-right: calc(6px + env(safe-area-inset-right)); }
+  .ibtn { width: 36px; height: 32px; }
+
+  /* HUD: 내 정보 칸은 탱크 이름표가 대신 → 각도·파워를 넓게, 아이템은 항상 보이게 */
+  .h-me { display: none !important; }
+  .h-angle { flex: none; }
+  .h-power { min-width: 0 !important; flex: 1 1 0; }
+  body #hud .h-items, body #hud.mine .h-items { display: flex !important; position: static !important; background: rgba(255, 255, 255, .06) !important; }
+
+  /* 채팅·알림은 왼쪽 위로 (이동 버튼과 안 겹치게) */
+  .chatlog { top: calc(62px + env(safe-area-inset-top)); bottom: auto; left: calc(10px + env(safe-area-inset-left)); width: min(300px, 46vw); }
+  .chatlog div { font-size: 12.5px; padding: 3px 9px; }
+  .chatform { top: calc(62px + env(safe-area-inset-top)); bottom: auto; transform: none; left: calc(10px + env(safe-area-inset-left)); }
+
+  /* 터치 버튼: 게임 버튼 느낌 */
+  .touch button {
+    background: radial-gradient(circle at 50% 30%, rgba(86, 108, 190, .78), rgba(16, 22, 50, .82));
+    border: 2px solid rgba(255, 255, 255, .38);
+    box-shadow: 0 4px 0 rgba(0, 0, 0, .38), inset 0 2px 0 rgba(255, 255, 255, .2);
+    text-shadow: 0 2px 0 rgba(0, 0, 0, .35); transition: transform .06s;
+  }
+  .touch button.press { transform: translateY(2px) scale(.95); background: radial-gradient(circle at 50% 30%, #ffe680, #ffb21e); color: #3a2400; text-shadow: none; box-shadow: 0 2px 0 rgba(0, 0, 0, .35), 0 0 18px rgba(255, 210, 58, .75); }
+  .t-left { left: calc(12px + env(safe-area-inset-left)); bottom: calc(var(--hudH, 72px) + 12px); flex-direction: column; align-items: stretch; gap: 7px; }
+  .t-move { display: flex; gap: 10px; }
+  .t-fuel { height: 8px; background: rgba(0, 0, 0, .5); border-radius: 99px; overflow: hidden; border: 1px solid rgba(255, 255, 255, .25); }
+  .t-fuel i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #ffb21e, #ffd84d); transition: width .15s; }
+  .t-right { right: calc(12px + env(safe-area-inset-right)); bottom: calc(var(--hudH, 72px) + 12px); }
+  .touch .t-fire { position: relative; overflow: visible; background: radial-gradient(circle at 40% 30%, #ff9a6a, #e0301e); border-color: #ffd0b0; color: #fff; }
+  .touch .t-fire.press { background: radial-gradient(circle at 40% 30%, #ffe066, #ff7a1a); color: #3a1400; }
+  /* 발사 버튼 둘레 파워 링 */
+  .touch .t-fire::before {
+    content: ''; position: absolute; inset: -8px; border-radius: 50%; pointer-events: none;
+    background: conic-gradient(from 0deg, #3dd16a, #ffd23a calc(var(--pw, 0) * .55%), #ff5a2e calc(var(--pw, 0) * 1%), rgba(255, 255, 255, .14) 0);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6px));
+    mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6px));
+  }
+  /* 내 차례가 아닐 땐 조작 버튼을 흐리게 */
+  #hud.watch ~ #touch { opacity: .35; }
+  .rotate-hint { top: auto; bottom: calc(var(--hudH, 72px) + 150px); pointer-events: auto; border: 2px solid #ffd23a; box-shadow: 0 6px 18px rgba(0, 0, 0, .45); font-size: 15px; padding: 10px 16px; border-radius: 14px; white-space: nowrap; }
+}
+
+/* 휴대폰 가로 */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 520px) {
+  .timer { width: 40px; height: 40px; font-size: 18px; border-width: 2px; }
+  #mini { width: 124px; }
+  .wind-bar { width: 100px; }
+  .wind-txt { font-size: 16px; }
+  #hud { gap: 5px; padding-top: 4px; padding-bottom: calc(4px + env(safe-area-inset-bottom)); }
+  .dial { width: 34px; height: 34px; }
+  .h-val b, .pw-top b { font-size: 18px; }
+  .pw-bar { height: 16px; }
+  .wbtn { height: 42px; min-width: 50px; }
+  .ibtn2 { height: 42px; min-width: 38px; }
+  .t-left, .t-right { bottom: calc(var(--hudH, 60px) + 10px); }
+  .touch button { width: 52px; height: 52px; font-size: 19px; }
+  .touch .t-fire { width: 78px; height: 78px; font-size: 21px; }
+  .t-ang { gap: 6px; }
+}
+
+/* 휴대폰 세로: HUD 두 줄(각도·파워 / 무기·아이템) */
+@media (pointer: coarse) and (orientation: portrait) {
+  #hud { flex-wrap: wrap; gap: 6px; padding-top: 6px; }
+  .h-angle { order: 1; }
+  .h-power { order: 2; flex: 1 1 calc(100% - 150px); }
+  .h-weapons { order: 3; flex: 1 1 100%; }
+  body #hud .h-items, body #hud.mine .h-items { order: 4; flex: 1 1 100%; }
+  .h-items .ibtn2 { flex: 1; }
+  .h-weapons .wbtn { flex: 1; min-width: 0; }
+  .wbtn { height: 46px; }
+  .wbtn .wn { font-size: 13px; }
+  .ibtn2 { min-width: 0; width: 40px; height: 46px; font-size: 17px; padding: 2px; }
+  .dial { width: 38px; height: 38px; }
+  .h-val b, .pw-top b { font-size: 20px; }
+  .pw-bar { height: 18px; }
+  .timer { width: 42px; height: 42px; font-size: 19px; }
+  .wind { padding: 4px 8px; }
+  .wind-bar { width: 84px; }
+  .wind-txt { font-size: 15px; }
+  #mini { width: 96px; }
+  .tb-left, .tb-right { gap: 6px; }
+  .chatlog { width: min(240px, 62vw); top: calc(72px + env(safe-area-inset-top)); }
+  .banner { top: 26%; }
+}
+
+/* 낮은 가로 화면(휴대폰 가로)에서 첫 화면·대기실 */
+@media (orientation: landscape) and (max-height: 520px) {
+  #home { padding-top: 8px; }
+  .logo { margin: 0 0 10px; }
+  .logo-main { font-size: 50px; }
+  .logo-sub { margin-top: 6px; font-size: 14px; }
+  #room { padding-bottom: 78px; }
+  .room-foot { justify-content: flex-end; padding: 8px calc(14px + env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)); background: none; pointer-events: none; }
+  .room-foot > * { pointer-events: auto; }
+  .room-foot .btn.big { min-width: 0; font-size: 17px; padding: 11px 20px; box-shadow: 0 4px 0 #b86d00, 0 8px 24px rgba(0, 0, 0, .5); }
+  .room-foot .wait { background: rgba(10, 14, 34, .85); padding: 8px 14px; border-radius: 12px; }
+}
