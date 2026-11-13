@@ -344,6 +344,9 @@
       this.miniVer = -1; this.miniAt = 0;
       const th = E.THEMES[w.theme] || E.THEMES.meadow;
       this.th = th; this.skyGrad = null;
+      // 각도·예상 경로 색: 맵마다 배경과 대비되는 색 + 밝기에 따라 흰/검은 테두리
+      this.guide = th.aim || '#ffe14d';
+      { const c = E.hexRgb(this.guide), lum = (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) / 255; this.guideOl = lum < 0.55 ? 'rgba(255,255,255,.95)' : 'rgba(12,16,34,.85)'; }
       const rng = E.mulberry32(w.seed ^ 0xabcdef);
       const mk = (p, base, amp, col) => {
         const waves = [];
@@ -752,36 +755,59 @@
       const n = pts.length / 2;
       if (!n) return;
       const live = pv.live, pulse = live ? 1 : 0.8 + 0.2 * Math.sin(this.time * 5);
-      ctx.lineWidth = 1.2;
+      ctx.lineWidth = 1.6; ctx.fillStyle = this.guide; ctx.strokeStyle = this.guideOl;
       for (let i = 0; i < n; i++) {
         const k = n > 1 ? i / (n - 1) : 1;
-        const al = (live ? 0.95 : 0.6) * (1 - k * 0.55) * pulse;
-        ctx.fillStyle = 'rgba(255,255,255,' + al.toFixed(3) + ')'; ctx.strokeStyle = 'rgba(20,24,40,' + (al * 0.55).toFixed(3) + ')';
-        circle(ctx, pts[i * 2], pts[i * 2 + 1], 3 - k * 1.3); ctx.fill(); ctx.stroke();
+        ctx.globalAlpha = (live ? 1 : 0.7) * (1 - k * 0.5) * pulse;
+        circle(ctx, pts[i * 2], pts[i * 2 + 1], 3.3 - k * 1.3); ctx.fill(); ctx.stroke();
       }
+      ctx.globalAlpha = 1;
       if (apex) {
         const ex = pts[pts.length - 2], ey = pts[pts.length - 1];
-        ctx.strokeStyle = live ? 'rgba(255,225,77,.95)' : 'rgba(255,225,77,.6)'; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(ex, ey + 2, 7, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
+        ctx.globalAlpha = live ? 1 : 0.7; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.arc(ex, ey + 2, 8, Math.PI * 1.15, Math.PI * 1.85);
+        ctx.lineWidth = 5; ctx.strokeStyle = this.guideOl; ctx.stroke();
+        ctx.lineWidth = 2.4; ctx.strokeStyle = this.guide; ctx.stroke();
+        ctx.globalAlpha = 1; ctx.lineCap = 'butt';
       }
     }
 
+    // 각도 표시: 맵 배경과 대비되는 색(THEMES[].aim) + 반대 톤 테두리 → 어떤 배경에서도 잘 보이게
     aimGuide(ctx, t) {
+      const g = this.guide, ol = this.guideOl;
       ctx.save(); ctx.translate(0, -C.PIVOT);
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       const f = t.facing, R = 52;
-      ctx.strokeStyle = 'rgba(255,255,255,.28)'; ctx.lineWidth = 2;
-      ctx.beginPath();
-      if (f > 0) ctx.arc(0, 0, R, -Math.PI / 2, 0); else ctx.arc(0, 0, R, Math.PI, Math.PI * 1.5);
-      ctx.stroke();
-      const a = t.angle * Math.PI / 180, ex = Math.cos(a) * f * (R + 10), ey = -Math.sin(a) * (R + 10);
-      ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(Math.cos(a) * f * 26, -Math.sin(a) * 26); ctx.lineTo(ex, ey); ctx.stroke();
+      const arc = () => { ctx.beginPath(); if (f > 0) ctx.arc(0, 0, R, -Math.PI / 2, 0); else ctx.arc(0, 0, R, Math.PI, Math.PI * 1.5); };
+      ctx.lineWidth = 5; ctx.strokeStyle = ol; ctx.globalAlpha = 0.55; arc(); ctx.stroke();
+      ctx.lineWidth = 2; ctx.strokeStyle = g; ctx.globalAlpha = 0.7; arc(); ctx.stroke();
+      // 30°마다 눈금
+      ctx.globalAlpha = 0.85;
+      for (let d = 0; d <= 90; d += 30) {
+        const r = d * Math.PI / 180, cx = Math.cos(r) * f, cy = -Math.sin(r);
+        ctx.beginPath(); ctx.moveTo(cx * (R - 5), cy * (R - 5)); ctx.lineTo(cx * (R + 5), cy * (R + 5));
+        ctx.lineWidth = 4.5; ctx.strokeStyle = ol; ctx.stroke(); ctx.lineWidth = 2; ctx.strokeStyle = g; ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      // 지금 각도 선
+      const a = t.angle * Math.PI / 180, ca = Math.cos(a) * f, sa = -Math.sin(a), ex = ca * (R + 12), ey = sa * (R + 12);
+      ctx.beginPath(); ctx.moveTo(ca * 26, sa * 26); ctx.lineTo(ex, ey);
+      ctx.setLineDash([6, 5]);
+      ctx.lineWidth = 6; ctx.strokeStyle = ol; ctx.stroke();
+      ctx.lineWidth = 3; ctx.strokeStyle = g; ctx.stroke();
       ctx.setLineDash([]);
-      ctx.fillStyle = '#ffe14d'; circle(ctx, ex, ey, 3.5); ctx.fill();
+      ctx.fillStyle = g; ctx.strokeStyle = ol; ctx.lineWidth = 2.2; circle(ctx, ex, ey, 5); ctx.fill(); ctx.stroke();
+      // 지난번 각도(작은 표시)
       if (t.lastShot) {
         const la = t.lastShot * Math.PI / 180;
-        ctx.fillStyle = 'rgba(255,120,120,.9)'; circle(ctx, Math.cos(la) * f * R, -Math.sin(la) * R, 2.6); ctx.fill();
+        ctx.fillStyle = '#ff4d6d'; ctx.strokeStyle = ol; ctx.lineWidth = 1.6;
+        circle(ctx, Math.cos(la) * f * R, -Math.sin(la) * R, 3.4); ctx.fill(); ctx.stroke();
       }
+      // 각도 숫자 — 탱크 옆(바라보는 쪽)에
+      const lx = f * (R + 16), ly = t.angle < 16 ? 16 : -4;
+      ctx.font = '900 15px "Black Han Sans", Jua, sans-serif'; ctx.textBaseline = 'middle'; ctx.textAlign = f > 0 ? 'left' : 'right';
+      ctx.lineWidth = 4.5; ctx.strokeStyle = ol; ctx.strokeText(t.angle + '°', lx, ly);
+      ctx.fillStyle = g; ctx.fillText(t.angle + '°', lx, ly);
       ctx.restore();
     }
 

@@ -3,7 +3,7 @@
 (function () {
   'use strict';
   const E = window.Engine, D = window.Draw, C = E.C;
-  const VERSION = '1.2.1';
+  const VERSION = '1.2.2';
   const TOPIC_ROOT = 'potan-battle/v1/';
   const BROKERS = [
     { url: 'wss://broker.emqx.io:8084/mqtt' },
