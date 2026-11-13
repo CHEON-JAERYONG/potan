@@ -429,7 +429,7 @@ body { overscroll-behavior: none; }
 .tank-grid.mini .upb { left: 3px; top: 3px; font-size: 10px; }
 
 /* 팝업 공통 */
-.modal { position: fixed; inset: 0; z-index: 40; background: rgba(4, 7, 18, .62); display: grid; place-items: center; padding: 12px; padding-top: calc(12px + env(safe-area-inset-top)); padding-bottom: calc(12px + env(safe-area-inset-bottom)); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+.modal { position: fixed; inset: 0; z-index: 40; background: rgba(4, 7, 18, .74); display: grid; place-items: center; padding: 12px; padding-top: calc(12px + env(safe-area-inset-top)); padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
 .modal-card { position: relative; width: min(560px, 100%); max-height: 100%; overflow: auto; background: linear-gradient(180deg, #1f2c60, #131b3d); border: 3px solid #ffd23a; border-radius: 22px; padding: 14px 16px 16px; box-shadow: 0 20px 60px rgba(0, 0, 0, .6); animation: pop .25s ease-out; overscroll-behavior: contain; }
 .m-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .m-title { font-family: var(--big); font-size: 24px; font-weight: normal; color: #ffd23a; }

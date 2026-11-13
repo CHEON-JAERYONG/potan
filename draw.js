@@ -300,9 +300,12 @@
   // UI용 미리보기
   function preview(cv, type, color, opts) {
     opts = opts || {};
-    const dpr = Math.min(2, root.devicePixelRatio || 1);
-    const w = cv.clientWidth || cv.width, h = cv.clientHeight || cv.height;
-    if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+    // 화면에 안 보이는(숨겨진) 캔버스는 그리지 않음 — 예전엔 숨겨진 캔버스 크기를 잘못 재서
+    // 그릴 때마다 2배씩 커졌고(휴대폰처럼 화면 배율이 2 이상일 때), 결국 화면이 멈췄음
+    const w = cv.clientWidth, h = cv.clientHeight;
+    if (!w || !h) return;
+    const dpr = Math.min(2, root.devicePixelRatio || 1), W = Math.round(w * dpr), H = Math.round(h * dpr);
+    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
     const ctx = cv.getContext('2d');
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height);
     const s = cv.height / (opts.zoom || 50);

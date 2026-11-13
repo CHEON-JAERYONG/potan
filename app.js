@@ -3,7 +3,7 @@
 (function () {
   'use strict';
   const E = window.Engine, D = window.Draw, C = E.C;
-  const VERSION = '1.2.0';
+  const VERSION = '1.2.1';
   const TOPIC_ROOT = 'potan-battle/v1/';
   const BROKERS = [
     { url: 'wss://broker.emqx.io:8084/mqtt' },
@@ -1111,6 +1111,7 @@
     else if (G.mode === 'team') { const tm = alive[0].team; title = (tm === 1 ? '🔴 레드팀' : '🔵 블루팀') + ' 승리!'; iWon = world.tanks.some(t => t.id === me.id && t.team === tm); }
     else { title = '🏆 ' + alive[0].name + ' 승리!'; iWon = alive[0].id === me.id; }
     $('overTitle').textContent = title;
+    $('over').hidden = false;   // 먼저 보이게 해야 탱크 그림 크기를 제대로 잼
     D.preview($('overTank'), winner.type, winner.alive ? winner.color : '#777', { angle: 55, zoom: 44, time: 1 });
     const tb = $('overRank'); tb.innerHTML = '';
     ranked.forEach((t, i) => {
@@ -1173,6 +1174,7 @@
   function layout() {
     if (!rd) return;
     rd.resize();
+    hudCache.icon = null;   // 화면 크기가 바뀌면 내 탱크 아이콘 다시 그림
     const hh = $('hud').offsetHeight;
     rd.hudPx = hh * rd.dpr;
     rd.topPx = 66 * rd.dpr;
@@ -1250,7 +1252,8 @@
       rd.frame(dt, vs);
       rd.drawMini($('mini'), vs);
       hudTick();
-    } else {
+    } else if (!Shop.isOpen()) {
+      // 상점·자세히보기 창이 열려 있으면 뒤 배경 전투·탱크 카드 움직임은 잠시 멈춤(휴대폰 부담 줄이기)
       demoTick(dt);
       pickT += dt;
       if (Math.floor(pickT * 8) !== Math.floor((pickT - dt) * 8)) drawPickers(screen === 'room' ? $('roomTankGrid') : $('tankGrid'), screen === 'room');
@@ -1487,7 +1490,7 @@
     setTank(k) { if (!Wallet.owns(k)) return; me.tank = k; myTankChanged(); },
     changed() { myTankChanged(); }
   });
-  Wallet.onChange(() => { renderCoins(); if (screen !== 'game') buildPickers(); });
+  Wallet.onChange(() => { renderCoins(); if (screen !== 'game') buildPickers(); });   // buildPickers는 보이는 카드만 다시 그림
   $('btnShop').onclick = () => { Sfx.play('click'); Shop.showShop('tank'); };
   $('btnRoomShop').onclick = () => { Sfx.play('click'); Shop.showShop('tank'); };
   document.addEventListener('visibilitychange', () => { if (!document.hidden) lastT = now(); });
