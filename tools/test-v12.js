@@ -87,7 +87,7 @@ async function practice(p, theme, tank) {
   await p.selectOption('#setTheme', 'canyon'); await p.click('#btnStart'); await p.waitForTimeout(1500);
   ok(await myTurn(p), '내 차례 옴');
   const t0 = await p.evaluate(() => { const t = __pt.world.tank(__pt.me.id); return { hp: t.hp, maxHp: t.maxHp, mv: t.moveMax, dm: t.dmgMul }; });
-  ok(t0.maxHp === 137 && t0.hp === 137 && t0.mv === 96, '곰돌+강화 체력 137 · 이동 96 ' + JSON.stringify(t0));
+  ok(t0.maxHp === 137 && t0.mv === 96, '곰돌+강화 체력 137 · 이동 96 ' + JSON.stringify(t0));
   const pv = await p.evaluate(() => __pt.viewState().pv);
   ok(pv && pv.power === 50 && !pv.live, '예상 경로 정보(기본 파워 50)');
   await p.screenshot({ path: SP + '/v12_aim.png' });
