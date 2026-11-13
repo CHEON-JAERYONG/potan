@@ -14,6 +14,7 @@ const SP = process.argv[2] || require('path').join(__dirname, 'shots');
     p.on('pageerror', e => logs.push(tank + ' PAGEERR: ' + e.message));
     p.on('console', m => { if (m.type() === 'error' && !m.text().includes('404')) logs.push(tank + ' ' + m.text()); });
     await p.goto(BASE);
+    await p.evaluate(() => localStorage.setItem('pt.infoOff', String(Date.now() + 864e5)));  // v1.2: 탱크 자세히보기 팝업 끄기
     await p.fill('#nick', '테스트');
     await p.click(`.tank-card[data-k="${tank}"]`);
     await p.click('#btnPractice');

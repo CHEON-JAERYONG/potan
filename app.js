@@ -3,7 +3,7 @@
 (function () {
   'use strict';
   const E = window.Engine, D = window.Draw, C = E.C;
-  const VERSION = '1.1.0';
+  const VERSION = '1.2.0';
   const TOPIC_ROOT = 'potan-battle/v1/';
   const BROKERS = [
     { url: 'wss://broker.emqx.io:8084/mqtt' },
@@ -61,9 +61,11 @@
     tank: store.get('pt.tank', 'boom'),
     color: store.get('pt.color', '')
   };
-  if (!E.TANKS[me.tank]) me.tank = 'boom';
+  const Wallet = window.Shop.Wallet;
+  if (!E.TANKS[me.tank] || !Wallet.owns(me.tank)) me.tank = 'boom';
   if (E.COLORS.indexOf(me.color) < 0) me.color = pick(E.COLORS);
   function saveMe() { store.set('pt.name', me.name); store.set('pt.tank', me.tank); store.set('pt.color', me.color); }
+  const myUp = () => Wallet.up(me.tank);   // 지금 고른 탱크의 강화 단계
 
   /* ================= 소리 (WebAudio로 즉석 합성 — 음원 파일 없음) ================= */
   const Sfx = (() => {
@@ -117,6 +119,11 @@
         case 'lose': [392, 330, 262, 196].forEach((f, i) => tone(t + i * 0.18, f, 0, 0.36, 0.18, 'triangle')); break;
         case 'chat': tone(t, 880, 1320, 0.1, 0.1); break;
         case 'water': noise(t, 1.4, 500, 0.8, 0.5, 'lowpass', 150); break;
+        case 'jump': tone(t, 260, 620, 0.16, 0.22, 'triangle'); noise(t, 0.12, 900, 0.8, 0.18, 'lowpass', 300); break;
+        case 'whistle': tone(t, 1500, 500, 0.55, 0.07, 'sine'); break;
+        case 'tele': [880, 1320, 1760].forEach((f, i) => tone(t + i * 0.05, f, f * 1.5, 0.18, 0.12, 'sine')); break;
+        case 'coin': [988, 1319].forEach((f, i) => tone(t + i * 0.07, f, 0, 0.16, 0.16, 'square')); break;
+        case 'buy': [659, 784, 988, 1319].forEach((f, i) => tone(t + i * 0.08, f, 0, 0.2, 0.17, 'triangle')); break;
       }
     }
     function charge(p) {
@@ -239,7 +246,7 @@
     if (!R || !R.online) return;
     if (!force && Date.now() - lastHello < 3000) return;
     lastHello = Date.now();
-    emit({ t: 'hello', p: { name: me.name, tank: me.tank, color: me.color } }, false);
+    emit({ t: 'hello', p: { name: me.name, tank: me.tank, color: me.color, up: myUp() } }, false);
   }
   function renderNet() {
     const el = $('netState'); if (!el || !R) return;
@@ -249,7 +256,7 @@
   }
 
   /* ================= 대기실 ================= */
-  function myPlayer() { return { id: me.id, name: me.name, tank: me.tank, color: me.color, team: 1, bot: false, join: Date.now() }; }
+  function myPlayer() { return { id: me.id, name: me.name, tank: me.tank, color: me.color, up: myUp(), team: 1, bot: false, join: Date.now() }; }
   function autoTeam() {
     const t1 = R.players.filter(p => p.team === 1).length, t2 = R.players.filter(p => p.team === 2).length;
     return t1 <= t2 ? 1 : 2;
@@ -328,7 +335,7 @@
     if (!isHost() || !d.p) return;
     const p = R.players.find(x => x.id === d.from);
     if (R.phase === 'lobby') {
-      const info = { name: cleanName(d.p.name) || '손님', tank: E.TANKS[d.p.tank] ? d.p.tank : 'boom', color: E.COLORS.indexOf(d.p.color) >= 0 ? d.p.color : E.COLORS[0] };
+      const info = { name: cleanName(d.p.name) || '손님', tank: E.TANKS[d.p.tank] ? d.p.tank : 'boom', color: E.COLORS.indexOf(d.p.color) >= 0 ? d.p.color : E.COLORS[0], up: E.cleanUp(d.p.up) };
       if (p) Object.assign(p, info);
       else {
         if (R.players.length >= MAX_PLAYERS) { emit({ t: 'chat', sys: 1, to: d.from, text: '방이 가득 찼어요 (최대 8명)' }, false); return; }
@@ -348,6 +355,7 @@
     if (d.p.name) p.name = cleanName(d.p.name) || p.name;
     if (E.TANKS[d.p.tank]) p.tank = d.p.tank;
     if (E.COLORS.indexOf(d.p.color) >= 0) p.color = d.p.color;
+    if (d.p.up) p.up = E.cleanUp(d.p.up);
     if (d.p.team === 1 || d.p.team === 2) p.team = d.p.team;
     pushRoom();
   }
@@ -394,16 +402,17 @@
     const ul = $('pList');
     $('pCount').textContent = R.players.length + ' / ' + MAX_PLAYERS;
     const team = R.settings.mode === 'team';
-    const sig = JSON.stringify([R.host, team, waitingSig(), R.players.map(p => [p.id, p.name, p.tank, p.color, p.team, p.bot || present(p.id)])]);
+    const sig = JSON.stringify([R.host, team, waitingSig(), R.players.map(p => [p.id, p.name, p.tank, p.color, p.team, p.bot || present(p.id), p.up])]);
     if (ul.dataset.sig !== sig) { ul.dataset.sig = sig; ul.innerHTML = ''; }
     for (const p of (ul.children.length ? [] : R.players)) {
       const li = document.createElement('li');
       if (p.id === me.id) li.className = 'me';
       const on = p.bot || present(p.id);
       const tk = E.TANKS[p.tank] || E.TANKS.boom;
+      const ups = p.up ? E.UPG.keys.reduce((a, k) => a + (p.up[k] | 0), 0) : 0;
       li.innerHTML = '<canvas></canvas><div class="pn"><b>' + esc(p.name) + '</b>' +
         (p.id === R.host ? '<span class="tag host">👑 방장</span>' : '') + (p.id === me.id ? '<span class="tag">나</span>' : '') +
-        '<small>' + esc(tk.name) + ' · ' + esc(tk.role) + (p.bot ? ' · ' + LEVEL_TXT[p.level] : '') + '</small></div>' +
+        '<small>' + esc(tk.name) + ' · ' + esc(tk.role) + (ups ? ' · ⚙강화 +' + ups : '') + (p.bot ? ' · ' + LEVEL_TXT[p.level] : '') + '</small></div>' +
         (team ? '<button class="team-b t' + p.team + '">' + (p.team === 1 ? '🔴 레드' : '🔵 블루') + '</button>' : '') +
         (p.bot ? '' : '<span class="dot' + (on ? '' : ' off') + '" title="' + (on ? '접속 중' : '연결 끊김') + '"></span>') +
         (host && p.id !== me.id ? '<button class="xbtn" title="내보내기">✕</button>' : '');
@@ -459,9 +468,19 @@
     buildPickers();
     if (!R || screen !== 'room') return;
     const mine = R.players.find(p => p.id === me.id);
-    if (mine) { mine.tank = me.tank; mine.color = me.color; }
+    if (mine) { mine.tank = me.tank; mine.color = me.color; mine.up = myUp(); }
     if (isHost()) pushRoom();
-    else { emit({ t: 'upd', p: { tank: me.tank, color: me.color, name: me.name } }, false); renderRoom(); }
+    else { emit({ t: 'upd', p: { tank: me.tank, color: me.color, name: me.name, up: myUp() } }, false); renderRoom(); }
+  }
+  function pickTank(k) {
+    if (!E.TANKS[k]) return;
+    if (!Wallet.owns(k)) { Shop.showInfo(k, false); return; }   // 🔒 아직 안 산 탱크 → 설명 + 사기 버튼
+    me.tank = k; Sfx.play('click'); myTankChanged();
+    Shop.showInfo(k, true);                                       // 고를 때마다 설명(하루 끄기면 안 뜸)
+  }
+  function renderCoins() {
+    const c = Shop.fmt(Wallet.coins);
+    $('homeCoins').textContent = c; $('roomCoins').textContent = c;
   }
 
   /* ---------- 탱크 고르기 ---------- */
@@ -475,8 +494,12 @@
         const tk = E.TANKS[k];
         const b = document.createElement('div');
         b.className = 'tank-card'; b.dataset.k = k;
-        b.innerHTML = '<canvas></canvas><div><span class="tn">' + tk.name + '</span><span class="tr">' + tk.role + '</span></div><div class="td">' + tk.desc + '</div><div class="tw">' + tk.weapons.map((w, i) => (i === 2 ? '★' : (i + 1) + '.') + ' ' + w.name).join(' · ') + '</div>';
-        b.onclick = () => { me.tank = k; Sfx.play('click'); myTankChanged(); };
+        b.innerHTML = '<canvas></canvas><div><span class="tn">' + tk.name + '</span><span class="tr">' + tk.role + '</span></div><div class="td">' + tk.desc + '</div><div class="tw">' + tk.weapons.map((w, i) => (i === 2 ? '★' : (i + 1) + '.') + ' ' + w.name).join(' · ') + '</div>' +
+          '<button class="info-b" title="자세히보기">ⓘ</button><div class="lock">🔒 ' + (tk.price ? '💰' + Shop.fmt(tk.price) : '') + '</div><div class="upb"></div>';
+        b.onclick = e => {
+          if (e.target.closest('.info-b')) { Sfx.play('click'); Shop.showInfo(k, false); return; }
+          pickTank(k);
+        };
         grid.appendChild(b);
       }
       for (const c of E.COLORS) {
@@ -486,7 +509,12 @@
         row.appendChild(s);
       }
     }
-    for (const b of grid.children) b.classList.toggle('sel', b.dataset.k === me.tank);
+    for (const b of grid.children) {
+      const k = b.dataset.k, n = Wallet.owns(k) ? Wallet.upTotal(k) : 0;
+      b.classList.toggle('sel', k === me.tank);
+      b.classList.toggle('locked', !Wallet.owns(k));
+      b.querySelector('.upb').textContent = n ? '⚙+' + n : '';
+    }
     for (const s of row.children) s.classList.toggle('sel', s.dataset.c === me.color);
     drawPickers(grid, mini);
   }
@@ -562,8 +590,8 @@
     }
     const init = {
       seed: (Math.random() * 2147483647) | 0, theme, W,
-      players: ps.map(p => ({ id: p.id, name: p.name, tank: p.tank, color: p.color, team: team ? p.team : 0, bot: !!p.bot, level: p.level })),
-      spawns, wind: randWind(), waterY: C.H - 40
+      players: ps.map(p => ({ id: p.id, name: p.name, tank: p.tank, color: p.color, team: team ? p.team : 0, bot: !!p.bot, level: p.level, up: E.cleanUp(p.up) })),
+      spawns, wind: randWind(), waterY: C.H - (E.THEMES[theme].sea || 40)
     };
     const g = { gid: rid(8), init, order, turnIdx: 0, turnNo: 1, sdTurn: n * 8 + 1, mode: team ? 'team' : 'ffa', time: R.settings.time, stats: {}, craters: [], deaths: {}, dcount: 0, over: false };
     R.phase = 'game'; R.seq++;
@@ -635,7 +663,7 @@
     phase = 'aim'; turnT0 = now(); lastTick = -1;
     Object.assign(aim, { charging: false, power: 0, weapon: 0, item: null, itemUsed: false, sent: false, mvSig: '', hostPassed: false });
     live.power = -1; live.weapon = 0; live.item = null;
-    t.fuel = C.MOVE_MAX; t.mvAcc = 0; t.netX = null;
+    t.fuel = t.moveMax || C.MOVE_MAX; t.mvAcc = 0; t.netX = null; t.jumped = false; t.jump = null;
     if (rd) rd.free = false;
     const mine = isMine(t);
     banner(mine ? '내 차례!' : t.name + ' 차례', mine, G.turnNo >= G.sdTurn ? '🌊 물이 차오르는 중!' : '');
@@ -666,7 +694,7 @@
     if (m.t === 'item') {
       if (m.k === 'heal' && t.alive && t.items.heal > 0) {
         t.items.heal--;
-        const amt = Math.min(30, C.HP - t.hp); t.hp += amt;
+        const amt = Math.min(30, (t.maxHp || C.HP) - t.hp); t.hp += amt;
         rd.heal(t, amt); Sfx.play('heal');
       }
       if (isMine(t)) aim.itemUsed = true;
@@ -765,7 +793,7 @@
   }
   function fireNow() {
     const t = curTank();
-    if (!isMine(t) || aim.sent || phase !== 'aim' || !t.alive) return;
+    if (!isMine(t) || aim.sent || phase !== 'aim' || !t.alive || t.jump) return;
     aim.charging = false; Sfx.charge(-1); buzz(25);
     shoot(t, { x: t.x, y: t.y, f: t.facing, a: t.angle, p: Math.max(1, Math.round(aim.power * 10) / 10), w: aim.weapon, item: aim.item });
   }
@@ -776,8 +804,22 @@
   }
   function startCharge() {
     const t = curTank();
-    if (!isMine(t) || phase !== 'aim' || aim.sent || aim.charging || !t.alive) return;
+    if (!isMine(t) || phase !== 'aim' || aim.sent || aim.charging || !t.alive || t.jump) return;
     aim.charging = true; aim.power = 0;
+  }
+  function canAim() { const t = curTank(); return isMine(t) && phase === 'aim' && !aim.sent && t.alive; }
+  // 각도를 n도만큼 (터치로 밀기 · 각도 막대 · 키보드 모두 여기로)
+  function nudgeAngle(n) {
+    if (!canAim()) return;
+    const t = curTank(), a = E.clamp(t.angle + n, 0, 90);
+    if (a !== t.angle) { if (Math.floor(a / 10) !== Math.floor(t.angle / 10)) buzz(5); t.angle = a; hudDirty = true; }
+  }
+  function doJump() {
+    const t = curTank();
+    if (!isMine(t) || phase !== 'aim' || aim.sent || aim.charging || !t.alive || t.jump || t.falling) return;
+    if (t.jumped) { toast('점프는 한 턴에 한 번만 할 수 있어요'); return; }
+    if (t.fuel < C.JUMP_COST) { toast('이동 게이지가 모자라요 (점프에 ' + C.JUMP_COST + ' 필요)'); return; }
+    if (world.startJump(t)) { Sfx.play('jump'); buzz(20); hudDirty = true; if (rd) rd.free = false; }
   }
   function releaseCharge() { if (aim.charging) fireNow(); }
   function selectWeapon(i) {
@@ -793,7 +835,7 @@
     if (!(t.items[key] > 0)) { toast('이 아이템은 다 썼어요'); return; }
     if (key === 'heal') {
       if (aim.item) { toast('이미 다른 아이템을 골랐어요'); return; }
-      if (t.hp >= C.HP) { toast('체력이 가득 차 있어요'); return; }
+      if (t.hp >= (t.maxHp || C.HP)) { toast('체력이 가득 차 있어요'); return; }
       aim.itemUsed = true;
       emit({ t: 'item', gid: G.gid, id: t.id, turnNo: G.turnNo, k: 'heal' });
     } else {
@@ -880,14 +922,17 @@
     const t = curTank(); if (!t) return;
     const el = (tm - turnT0) / 1000, left = G.time - el;
     if (isMine(t) && !aim.sent) {
-      const L = !!keys.left, Rt = !!keys.right;
-      if (L !== Rt) {
-        const dir = L ? -1 : 1;
-        if (t.facing !== dir) { t.facing = dir; hudDirty = true; }
-        if (!aim.charging && !t.falling && world.moveTank(t, dir, dt)) hudDirty = true;
-        if (rd) rd.free = false;
+      if (t.jump) { world.stepJump(t, dt); hudDirty = true; if (rd) rd.free = false; }
+      else {
+        const L = !!keys.left, Rt = !!keys.right;
+        if (L !== Rt) {
+          const dir = L ? -1 : 1;
+          if (t.facing !== dir) { t.facing = dir; hudDirty = true; }
+          if (!aim.charging && !t.falling && world.moveTank(t, dir, dt)) hudDirty = true;
+          if (rd) rd.free = false;
+        }
+        world.stepFall(t, dt);
       }
-      world.stepFall(t, dt);
       if (!t.alive) { sendPass(t, 'dead'); return; }
       angleKey('up', 1, dt); angleKey('down', -1, dt);
       if (aim.charging) {
@@ -899,7 +944,7 @@
       sendMove(t, aim.charging ? aim.power : -1);
       const sec = Math.ceil(left);
       if (sec <= 5 && sec > 0 && sec !== lastTick) { lastTick = sec; Sfx.play('tick'); }
-      if (left <= 0) { if (aim.charging) fireNow(); else sendPass(t, 'time'); }
+      if (left <= 0 && !t.jump) { if (aim.charging) fireNow(); else sendPass(t, 'time'); }
     } else if (t.bot && isHost()) {
       if (!bot && !aim.sent) bot = { t, stage: 0, at: tm + 600 };
       runBot(dt);
@@ -963,12 +1008,17 @@
     $('hud').classList.toggle('mine', isMine(t));
     setText('turnInfo', G.turnNo + '번째 턴 · ' + t.name + (isMine(t) ? ' (나)' : '') + (G.turnNo >= G.sdTurn ? ' 🌊' : G.turnNo >= G.sdTurn - 3 ? ' · 곧 물이 차올라요' : ''));
     setText('meName', t.name + (isMine(t) ? ' (나)' : ''));
-    setStyle('meHp', 'width', t.hp + '%');
-    setStyle('meHp', 'background', t.hp > 60 ? '#4ddc6a' : t.hp > 30 ? '#ffc93d' : '#ff4d4d');
-    setText('meHpTxt', t.hp + ' / 100');
-    setStyle('meFuel', 'width', Math.max(0, t.fuel / C.MOVE_MAX * 100) + '%');
-    setStyle('tFuel', 'width', Math.max(0, t.fuel / C.MOVE_MAX * 100) + '%');
+    { const k = t.hp / (t.maxHp || C.HP); setStyle('meHp', 'background', k > 0.6 ? '#4ddc6a' : k > 0.3 ? '#ffc93d' : '#ff4d4d'); }
+    const mhp = t.maxHp || C.HP, mmv = t.moveMax || C.MOVE_MAX;
+    setStyle('meHp', 'width', Math.min(100, t.hp / mhp * 100) + '%');
+    setText('meHpTxt', t.hp + ' / ' + mhp);
+    setStyle('meFuel', 'width', Math.max(0, t.fuel / mmv * 100) + '%');
+    setStyle('tFuel', 'width', Math.max(0, t.fuel / mmv * 100) + '%');
     setText('angTxt', t.angle + '°');
+    setText('tAngTxt', t.angle + '°');
+    if (hudCache.ruler !== t.angle) { hudCache.ruler = t.angle; $('tRuler').style.backgroundPositionY = (t.angle * 2.6) + 'px'; }
+    const canJump = mine && !t.jumped && !t.jump && t.fuel >= C.JUMP_COST;
+    $('btnJump').disabled = !canJump; $('tJump').classList.toggle('off', !canJump);
     setStyle('angNeedle', 'transform', 'rotate(' + (t.facing > 0 ? -t.angle : -(180 - t.angle)) + 'deg)');
     const pw = isMine(t) ? (aim.charging ? aim.power : -1) : live.power;
     setText('pwTxt', pw >= 0 ? pw.toFixed(1) : (t.lastPower != null ? '지난 ' + t.lastPower : '0'));
@@ -1002,6 +1052,7 @@
   function renderGList() {
     const ul = $('gList'), cur = curTank();
     const sig = G.order.map(id => { const t = world.tank(id); return id + t.hp + t.alive + (t === cur) + present(id); }).join('|');
+    const hpk = t => Math.min(1, t.hp / (t.maxHp || C.HP));
     if (hudCache.glist === sig) return;
     hudCache.glist = sig;
     ul.innerHTML = '';
@@ -1011,7 +1062,7 @@
       li.className = (t === cur ? 'cur ' : '') + (t.alive ? '' : 'dead');
       const off = !t.bot && R && R.online && !present(t.id);
       li.innerHTML = '<span class="c" style="background:' + t.color + '"></span><span class="n">' + (t.team ? (t.team === 1 ? '🔴' : '🔵') : '') + esc(t.name) + (t.id === me.id ? ' (나)' : '') + (off ? ' 📴' : '') + '</span>' +
-        (t.alive ? '<span class="hb"><i style="width:' + t.hp + '%;background:' + (t.hp > 60 ? '#4ddc6a' : t.hp > 30 ? '#ffc93d' : '#ff4d4d') + '"></i></span>' : '💀');
+        (t.alive ? '<span class="hb"><i style="width:' + hpk(t) * 100 + '%;background:' + (hpk(t) > 0.6 ? '#4ddc6a' : hpk(t) > 0.3 ? '#ffc93d' : '#ff4d4d') + '"></i></span>' : '💀');
       li.onclick = () => { if (rd) { rd.free = true; const c = rd.camFor(t.x, t.y - 60); rd.cam.x = c.x; rd.cam.y = c.y; } };
       ul.appendChild(li);
     }
@@ -1027,7 +1078,27 @@
   function viewState() {
     const off = {};
     if (R && R.online && world) for (const t of world.tanks) if (!t.bot && !present(t.id)) off[t.id] = 1;
-    return { sim, focus: phase === 'aim' ? curTank() : null, phase, me: me.id, wind: world ? world.wind : 0, offline: off };
+    // 예상 경로(꼭대기까지만): 내 차례일 때만. 파워를 모으는 중이면 그 파워, 아니면 지난번 파워(없으면 50)
+    let pv = null;
+    const t = phase === 'aim' ? curTank() : null;
+    if (t && isMine(t) && !aim.sent && t.alive && !t.jump) {
+      const tk = E.TANKS[t.type] || E.TANKS.boom;
+      pv = { power: aim.charging ? Math.max(1, aim.power) : (t.lastPower != null ? t.lastPower : 50), spec: tk.weapons[aim.weapon] || tk.weapons[0], wind: aim.item === 'calm' ? 0 : world.wind, live: aim.charging };
+    }
+    return { sim, focus: phase === 'aim' ? curTank() : null, phase, me: me.id, wind: world ? world.wind : 0, offline: off, pv };
+  }
+  // 판이 끝나면 코인 지급(한 판에 한 번)
+  function payReward(iWon, rank) {
+    const box = $('overCoins');
+    box.hidden = true;
+    if (!G || !world || !world.tank(me.id)) return;
+    const s = G.stats[me.id] || { dmg: 0, kills: 0 };
+    const parts = [['참가', 30], ['피해', Math.floor(s.dmg * 0.8)], ['K.O.', s.kills * 40], ['승리', iWon ? 120 : 0], ['순위', rank === 1 ? 0 : rank === 2 ? 20 : 0]];
+    const total = parts.reduce((a, p) => a + p[1], 0);
+    const fresh = Wallet.reward(G.gid, total);
+    box.innerHTML = '💰 <b>+' + Shop.fmt(total) + '</b> 코인' + (fresh ? '' : ' <small>(이미 받음)</small>') + '<small>' + parts.filter(p => p[1]).map(p => p[0] + ' ' + p[1]).join(' · ') + ' · 지금 ' + Shop.fmt(Wallet.coins) + '</small>';
+    box.hidden = false;
+    if (fresh) setTimeout(() => Sfx.play('coin'), 500);
   }
 
   /* ----- 결과 ----- */
@@ -1056,6 +1127,7 @@
     $('over').hidden = false;
     const inGame = world.tanks.some(t => t.id === me.id);
     if (inGame) Sfx.play(iWon ? 'win' : 'lose');
+    payReward(iWon, ranked.findIndex(t => t.id === me.id) + 1);
   }
 
   /* ================= 화면 전환 ================= */
@@ -1075,6 +1147,7 @@
     $('btnCreate').classList.toggle('gold', !code);
     $('nick').value = me.name;
     buildPickers();
+    renderCoins();
     demoStart();
   }
   function showRoom() {
@@ -1082,6 +1155,7 @@
     G = null; world = null; sim = null; anim = null; phase = 'none'; bot = null;
     Sfx.charge(-1);
     buildPickers();
+    renderCoins();
     renderRoom();
     demoStart();
   }
@@ -1251,6 +1325,7 @@
       else keys[k] = true;
       return;
     }
+    if (e.code === 'KeyJ') { if (!e.repeat) doJump(); return; }
     const n = { Digit1: 0, Digit2: 1, Digit3: 2, Numpad1: 0, Numpad2: 1, Numpad3: 2 }[e.code];
     if (n != null) { selectWeapon(n); return; }
     const it = { KeyZ: 'heal', KeyX: 'double', KeyC: 'power', KeyV: 'calm' }[e.code];
@@ -1265,14 +1340,46 @@
   // 터치 버튼
   for (const b of document.querySelectorAll('#touch button')) {
     const k = b.dataset.k;
-    const down = e => { e.preventDefault(); try { b.setPointerCapture(e.pointerId); } catch (x) { } b.classList.add('press'); if (k === 'fire') startCharge(); else keys[k] = true; };
-    const up = e => { b.classList.remove('press'); if (k === 'fire') releaseCharge(); else keys[k] = false; };
+    const down = e => { e.preventDefault(); try { b.setPointerCapture(e.pointerId); } catch (x) { } b.classList.add('press'); if (k === 'fire') startCharge(); else if (k === 'jump') doJump(); else keys[k] = true; };
+    const up = e => { b.classList.remove('press'); if (k === 'fire') releaseCharge(); else if (k !== 'jump') keys[k] = false; };
     b.addEventListener('pointerdown', down);
     b.addEventListener('pointerup', up);
     b.addEventListener('pointercancel', up);
     b.addEventListener('contextmenu', e => e.preventDefault());
   }
-  // 화면 끌어서 둘러보기 · 휠 확대
+  // 각도 막대(휴대폰) · HUD 각도 칸: 위아래로 밀면 각도, 톡 누르면 위쪽 +1° / 아래쪽 -1°
+  function angleDrag(el, pxPerDeg) {
+    let st = null;
+    el.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      try { el.setPointerCapture(e.pointerId); } catch (x) { }
+      st = { id: e.pointerId, y: e.clientY, y0: e.clientY, acc: 0, moved: false };
+      el.classList.add('press');
+    });
+    el.addEventListener('pointermove', e => {
+      if (!st || e.pointerId !== st.id) return;
+      const dy = st.y - e.clientY; st.y = e.clientY;
+      if (Math.abs(e.clientY - st.y0) > 6) st.moved = true;
+      // 빠르게 밀수록 더 많이
+      st.acc += dy / pxPerDeg * (Math.abs(dy) > 14 ? 1.6 : 1);
+      const n = Math.trunc(st.acc);
+      if (n) { st.acc -= n; nudgeAngle(n); }
+    });
+    const end = e => {
+      if (!st || e.pointerId !== st.id) return;
+      if (!st.moved) { const r = el.getBoundingClientRect(); nudgeAngle(e.clientY < r.top + r.height / 2 ? 1 : -1); }
+      st = null; el.classList.remove('press');
+    };
+    el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+    el.addEventListener('contextmenu', e => e.preventDefault());
+  }
+  angleDrag($('tAng'), 2.6);
+  angleDrag(document.querySelector('#hud .h-angle'), 2.6);
+  $('btnJump').onclick = () => doJump();
+  let angHintT = 0;
+  function angHint() { const h = $('angHint'); h.hidden = false; clearTimeout(angHintT); angHintT = setTimeout(() => { h.hidden = true; }, 900); }
+
+  // 화면 끌어서 둘러보기 · 휠 확대 · (휴대폰·내 차례) 위아래로 쓸면 각도
   (() => {
     const cv = $('cv'); let drag = null, pinch = null;
     const pts = new Map();
@@ -1281,12 +1388,28 @@
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       try { cv.setPointerCapture(e.pointerId); } catch (x) { }
       if (pts.size === 2 && rd) { pinch = { d: span(), m: rd.zoomMul }; drag = null; return; }
-      drag = { x: e.clientX, y: e.clientY, id: e.pointerId }; cv.classList.add('drag');
+      drag = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, id: e.pointerId, acc: 0, mode: e.pointerType === 'touch' && canAim() ? '?' : 'pan' };
+      cv.classList.add('drag');
     });
     cv.addEventListener('pointermove', e => {
       if (pts.has(e.pointerId)) pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pinch && pts.size >= 2 && rd) { rd.zoomMul = E.clamp(pinch.m * span() / pinch.d, 0.5, 1.5); return; }
       if (!drag || e.pointerId !== drag.id || !rd) return;
+      if (drag.mode === '?') {
+        const ddx = e.clientX - drag.x0, ddy = e.clientY - drag.y0;
+        if (Math.hypot(ddx, ddy) < 10) return;
+        drag.mode = Math.abs(ddy) > Math.abs(ddx) * 1.1 ? 'angle' : 'pan';
+        drag.x = e.clientX; drag.y = e.clientY;
+        if (drag.mode === 'angle') angHint();
+        return;
+      }
+      if (drag.mode === 'angle') {
+        const dy = drag.y - e.clientY; drag.y = e.clientY;
+        drag.acc += dy / 3.2;
+        const n = Math.trunc(drag.acc);
+        if (n) { drag.acc -= n; nudgeAngle(n); angHint(); }
+        return;
+      }
       const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
       if (Math.abs(dx) + Math.abs(dy) < 2) return;
       rd.panBy(dx * rd.dpr, dy * rd.dpr); drag.x = e.clientX; drag.y = e.clientY;
@@ -1357,6 +1480,16 @@
   };
   $('btnToRoom').onclick = () => { if (!isHost()) return; R.phase = 'lobby'; pushRoom(); showRoom(); };
   $('btnOverExit').onclick = () => leaveRoom();
+  // 상점 · 강화 · 자세히보기
+  Shop.init({
+    sfx: n => Sfx.play(n), toast,
+    tank: () => me.tank, color: () => me.color,
+    setTank(k) { if (!Wallet.owns(k)) return; me.tank = k; myTankChanged(); },
+    changed() { myTankChanged(); }
+  });
+  Wallet.onChange(() => { renderCoins(); if (screen !== 'game') buildPickers(); });
+  $('btnShop').onclick = () => { Sfx.play('click'); Shop.showShop('tank'); };
+  $('btnRoomShop').onclick = () => { Sfx.play('click'); Shop.showShop('tank'); };
   document.addEventListener('visibilitychange', () => { if (!document.hidden) lastT = now(); });
 
   /* ================= 시작 ================= */
@@ -1367,5 +1500,5 @@
     if (code && ss.get('pt.room') === code && me.name) joinRoom(code);
   }
   requestAnimationFrame(loop);
-  window.__pt = { me, get R() { return R; }, get G() { return G; }, get world() { return world; }, get phase() { return phase; }, get aim() { return aim; }, keys, fireNow, startCharge, useItem, selectWeapon, Net };
+  window.__pt = { me, get R() { return R; }, get G() { return G; }, get world() { return world; }, get phase() { return phase; }, get aim() { return aim; }, get rd() { return rd; }, keys, fireNow, startCharge, useItem, selectWeapon, doJump, nudgeAngle, viewState, Net, Wallet, Shop };
 })();

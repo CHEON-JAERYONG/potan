@@ -37,6 +37,22 @@ const SIZES = [
     }
     await p.waitForTimeout(800);
     await p.screenshot({ path: `${SP}/m_${TAG}_${name}_game.png` });
+    // 각도 막대 위로 밀기 · 화면 위아래로 쓸기 (v1.2)
+    const ang = () => p.evaluate(() => __pt.world.tank(__pt.me.id).angle);
+    const a0 = await ang();
+    const pad = await p.locator('#tAng').boundingBox();
+    const ev = (sel, type, x, y) => p.locator(sel).dispatchEvent(type, { pointerId: 7, pointerType: 'touch', clientX: x, clientY: y, isPrimary: true, bubbles: true });
+    const cx = pad.x + pad.width / 2, cy = pad.y + pad.height / 2;
+    await ev('#tAng', 'pointerdown', cx, cy);
+    for (let k = 1; k <= 6; k++) await ev('#tAng', 'pointermove', cx, cy - k * 8);
+    await ev('#tAng', 'pointerup', cx, cy - 48);
+    const a1 = await ang();
+    await ev('#cv', 'pointerdown', w / 2, h / 2);
+    for (let k = 1; k <= 8; k++) await ev('#cv', 'pointermove', w / 2 + 1, h / 2 + k * 8);
+    await p.screenshot({ path: `${SP}/m_${TAG}_${name}_swipe.png` });
+    await ev('#cv', 'pointerup', w / 2, h / 2 + 64);
+    const a2 = await ang();
+    console.log(name, 'angle pad', a0, '→', a1, '· swipe down →', a2, a1 > a0 && a2 < a1 ? 'OK' : 'FAIL');
     await p.locator('#touch button[data-k="fire"]').dispatchEvent('pointerdown', { pointerId: 1 });
     await p.waitForTimeout(900);
     await p.screenshot({ path: `${SP}/m_${TAG}_${name}_charge.png` });

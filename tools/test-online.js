@@ -12,6 +12,7 @@ const st = p => p.evaluate(() => {
   const t = w.tank(G.order[G.turnIdx]);
   return { phase: __pt.phase, turn: G.turnNo, cur: t.id, curName: t.name, bot: t.bot, me: __pt.me.id, hp: w.tanks.map(t => t.name + ':' + t.hp + (t.alive ? '' : 'x')).join(' '), pos: w.tanks.map(t => Math.round(t.x) + ',' + Math.round(t.y)).join(' '), cr: G.craters.length, wind: w.wind, over: G.over };
 });
+const prep = async p => { await p.evaluate(() => { localStorage.setItem('pt.infoOff', String(Date.now() + 864e5)); localStorage.setItem('pt.wallet', JSON.stringify({ coins: 9000, owned: ['bear', 'fire', 'magic'], up: { bear: { hp: 3, atk: 2, move: 1, sg: 2 }, magic: { atk: 5, hp: 1 } } })); }); await p.reload(); await p.waitForTimeout(600); };
 (async () => {
   const b = await chromium.launch({ executablePath: CHROME, headless: true });
   const ca = await b.newContext({ viewport: { width: 1280, height: 720 } });
@@ -22,9 +23,9 @@ const st = p => p.evaluate(() => {
     p.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') logs.push(n + ' ' + m.type() + ': ' + m.text()); });
     p.on('pageerror', e => logs.push(n + ' PAGEERR: ' + e.message));
   }
-  await A.goto(BASE);
+  await A.goto(BASE); await prep(A);
   await A.fill('#nick', '재룡');
-  await A.click('.tank-card[data-k="boom"]');
+  await A.click('.tank-card[data-k="' + (process.env.TA || 'bear') + '"]');
   await A.click('#btnCreate');
   // wait connection
   for (let i = 0; i < 30; i++) { const t = await A.textContent('#netState'); if (t.includes('연결')) { if (!t.includes('중')) break; } await A.waitForTimeout(500); }
@@ -32,11 +33,11 @@ const st = p => p.evaluate(() => {
   const url = await A.inputValue('#shareUrl');
   console.log('share', url);
   const t0 = Date.now();
-  await B.goto(url);
+  await B.goto(url); await prep(B);
   await B.waitForTimeout(800);
   await B.screenshot({ path: SP + '/o_b_home.png' });
   await B.fill('#nick', '친구');
-  await B.click('.tank-card[data-k="bouncy"]');
+  await B.click('.tank-card[data-k="' + (process.env.TB || 'magic') + '"]');
   await B.click('#btnJoin');
   for (let i = 0; i < 40; i++) { const s = await A.evaluate(() => __pt.R.players.length); if (s >= 2) break; await A.waitForTimeout(300); }
   console.log('join took', Date.now() - t0, 'ms; A players', await A.evaluate(() => __pt.R.players.map(p => p.name).join(',')));
@@ -50,6 +51,9 @@ const st = p => p.evaluate(() => {
   await A.waitForTimeout(2500);
   console.log('A', JSON.stringify(await st(A)));
   console.log('B', JSON.stringify(await st(B)));
+  const stats = p => p.evaluate(() => __pt.world.tanks.map(t => t.name + ' ' + t.type + ' hp' + t.maxHp + ' mv' + t.moveMax + ' x' + t.dmgMul.toFixed(2) + ' sg' + t.sgTurn).join(' | '));
+  const sa = await stats(A), sb = await stats(B);
+  console.log('stats A', sa); console.log('stats B', sb); console.log(sa === sb ? 'STATS MATCH' : 'STATS MISMATCH');
   await B.screenshot({ path: SP + '/o_b_game.png' });
   let shots = 0, lastTurn = 0, mism = 0;
   const tEnd = Date.now() + 150000;
@@ -72,12 +76,19 @@ const st = p => p.evaluate(() => {
           await P.locator('#touch button[data-k="right"]').dispatchEvent('pointerdown', { pointerId: 2 });
           await P.waitForTimeout(500);
           await P.locator('#touch button[data-k="right"]').dispatchEvent('pointerup', { pointerId: 2 });
+          // v1.2: 점프 · 순간이동탄/필살기 섞어 쓰기
+          await P.locator('#touch button[data-k="jump"]').dispatchEvent('pointerdown', { pointerId: 3 });
+          await P.locator('#touch button[data-k="jump"]').dispatchEvent('pointerup', { pointerId: 3 });
+          await P.waitForTimeout(1400);
+          await P.evaluate(n => { __pt.selectWeapon(2); if (__pt.aim.weapon !== 2) __pt.selectWeapon(n % 2); }, shots);
           await P.locator('#touch button[data-k="fire"]').dispatchEvent('pointerdown', { pointerId: 1 });
           await P.waitForTimeout(900 + Math.random() * 700);
           if (shots === 1) await P.screenshot({ path: SP + '/o_b_charge.png' });
           await P.locator('#touch button[data-k="fire"]').dispatchEvent('pointerup', { pointerId: 1 });
         } else {
           await P.keyboard.down('ArrowUp'); await P.waitForTimeout(300); await P.keyboard.up('ArrowUp');
+          await P.keyboard.press('KeyJ'); await P.waitForTimeout(1400);
+          await P.keyboard.press('Digit3'); if (!(await P.evaluate(() => __pt.aim.weapon === 2))) await P.keyboard.press(shots % 2 ? 'Digit2' : 'Digit1');
           await P.keyboard.down('Space'); await P.waitForTimeout(1000 + Math.random() * 700); await P.keyboard.up('Space');
         }
         shots++;

@@ -13,6 +13,7 @@ const SP = process.argv[2] || require('path').join(__dirname, 'shots');
   p.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') errs.push(m.type() + ': ' + m.text()); });
   p.on('pageerror', e => errs.push('PAGEERR: ' + e.message));
   await p.goto(BASE);
+  await p.evaluate(() => localStorage.setItem('pt.infoOff', String(Date.now() + 864e5)));  // v1.2: 탱크 자세히보기 팝업 끄기
   await p.waitForTimeout(2500);
   await p.screenshot({ path: SP + '/s_home.png' });
   await p.fill('#nick', '재룡');

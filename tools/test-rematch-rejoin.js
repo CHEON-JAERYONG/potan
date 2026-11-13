@@ -46,7 +46,7 @@ const aimFire = p => p.evaluate(() => { const G = __pt.G, w = __pt.world, t = w.
   await B.reload(); await B.waitForTimeout(800);
   console.log('B after reload screen', await B.evaluate(() => document.querySelector('.screen:not([hidden])').id));
   // 초대 링크 상태 → 입장 버튼
-  await B.click('#btnJoin');
+  if (await B.isVisible('#btnJoin')) await B.click('#btnJoin');   // 새로고침하면 보통 자동으로 다시 들어감
   bb = await waitFor(B, s => s.scr === 'game' && s.phase === 'aim', 20000);
   a = await st(A);
   console.log('B rejoined', JSON.stringify(bb)); console.log('A now', JSON.stringify(a));

@@ -14,6 +14,7 @@ const SP = process.argv[2] || require('path').join(__dirname, 'shots'), THEME = 
   p.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') errs.push(m.type() + ': ' + m.text()); });
   p.on('pageerror', e => errs.push('PAGEERR: ' + e.message));
   await p.goto(BASE);
+  await p.evaluate(() => localStorage.setItem('pt.infoOff', String(Date.now() + 864e5)));  // v1.2: 탱크 자세히보기 팝업 끄기
   await p.waitForTimeout(1200);
   await p.fill('#nick', '포탄왕');
   await p.click('.tank-card[data-k="boom"]');

@@ -22,7 +22,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Jua&display=swap">
-<link rel="stylesheet" href="style.css?v=1.1.0">
+<link rel="stylesheet" href="style.css?v=1.2.0">
 </head>
 <body>
 <canvas id="bg"></canvas>
@@ -35,13 +35,18 @@
     <div class="logo-sub">친구랑 링크 하나로 붙는 턴제 탱크 포격전</div>
   </header>
 
+  <div class="wallet-bar">
+    <span class="coin-pill">💰 <b id="homeCoins">0</b> 코인</span>
+    <button id="btnShop" class="btn small gold">🛒 상점 · 강화</button>
+  </div>
+
   <section class="panel">
     <div id="inviteBox" class="invite" hidden>📨 초대받은 방 <b id="inviteCode"></b> — 이름이랑 탱크를 고르고 입장하세요!</div>
     <label class="field">
       <span>내 탱크 이름 <small>(게임 안에서 탱크 위에 표시돼요)</small></span>
       <input id="nick" maxlength="8" placeholder="닉네임 (최대 8자)" autocomplete="nickname" enterkeyhint="done">
     </label>
-    <div class="sub">탱크 고르기</div>
+    <div class="sub">탱크 고르기 <small class="muted">— 누르면 자세히 설명이 나와요 · 🔒는 상점에서</small></div>
     <div id="tankGrid" class="tank-grid"></div>
     <div class="sub">색깔</div>
     <div id="colorRow" class="color-row"></div>
@@ -57,12 +62,14 @@
     <div class="keys">
       <div><kbd>←</kbd><kbd>→</kbd> 이동 (턴마다 이동 게이지만큼)</div>
       <div><kbd>↑</kbd><kbd>↓</kbd> 각도 조절 (꾹 누르면 빠르게)</div>
+      <div><kbd>J</kbd> 점프 — 구덩이·섬 사이 건너기 (한 턴에 한 번)</div>
       <div><kbd>Space</kbd> 꾹 눌러 파워 모으기 → 떼면 발사!</div>
       <div><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 무기 선택 (3번은 필살기 — 게이지가 차면)</div>
       <div><kbd>Z</kbd><kbd>X</kbd><kbd>C</kbd><kbd>V</kbd> 아이템 (회복 · 2연발 · 강화탄 · 무풍)</div>
       <div><kbd>Enter</kbd> 채팅 · 마우스 드래그로 화면 둘러보기 · 휠로 확대/축소</div>
     </div>
-    <p class="tip">💡 바람 방향을 꼭 보세요! 지난번 파워는 파워 게이지에 빨간 선으로 남아요. 물에 빠지면 바로 탈락!</p>
+    <p class="tip">💡 점선은 포탄이 꼭대기까지 가는 길만 보여줘요 — 떨어지는 곳은 감으로! 바람도 꼭 보세요. 물에 빠지면 바로 탈락!</p>
+    <p class="tip">📱 휴대폰: 각도는 오른쪽 <b>각도 막대를 위아래로 밀거나</b> 화면을 위아래로 쓸어서 · 파워는 발사 버튼을 꾹</p>
   </section>
   <footer class="foot">가입 · 설치 · 비용 없음 — 공개 중계 서버 2곳을 통해 친구와 연결돼요 · <span id="ver"></span></footer>
 </main>
@@ -108,7 +115,7 @@
       <div class="set"><span>모드</span><div class="seg" id="setMode"><button data-v="ffa">개인전</button><button data-v="team">팀전</button></div></div>
       <div class="set"><span>턴 시간</span><div class="seg" id="setTime"><button data-v="20">20초</button><button data-v="30">30초</button><button data-v="45">45초</button></div></div>
       <div id="myTeamRow" class="set" hidden><span>내 팀</span><div class="seg" id="myTeam"><button data-v="1">🔴 레드</button><button data-v="2">🔵 블루</button></div></div>
-      <div class="sub">내 탱크 <small class="muted">— 바꾸면 바로 반영돼요</small></div>
+      <div class="sub sub-row">내 탱크 <small class="muted">— 바꾸면 바로 반영돼요</small> <button id="btnRoomShop" class="btn small">🛒 상점 · 강화 <span class="coin-mini">💰 <b id="roomCoins">0</b></span></button></div>
       <div id="roomTankGrid" class="tank-grid mini"></div>
       <div id="roomColorRow" class="color-row"></div>
     </section>
@@ -176,24 +183,33 @@
     </div>
     <div class="h-weapons" id="weapons"></div>
     <div class="h-items" id="items"></div>
+    <div class="h-skill"><button id="btnJump" class="wbtn jbtn" title="점프 (J) — 한 턴에 한 번, 이동 게이지 30"><span class="k">J</span><span class="wn">⤴ 점프</span><span class="ws">게이지 30</span></button></div>
   </div>
 
   <div id="touch" class="touch">
     <div class="t-left">
+      <button data-k="jump" id="tJump" class="t-jump">⤴ 점프</button>
       <div class="t-move"><button data-k="left">◀</button><button data-k="right">▶</button></div>
       <div class="t-fuel" title="이동 게이지"><i id="tFuel"></i></div>
     </div>
     <div class="t-right">
-      <div class="t-ang"><button data-k="up">▲</button><button data-k="down">▼</button></div>
+      <div id="tAng" class="t-angpad" title="위아래로 밀어서 각도 조절">
+        <i class="ruler" id="tRuler"></i>
+        <span class="chev up">▲</span>
+        <b id="tAngTxt">45°</b>
+        <span class="chev dn">▼</span>
+      </div>
       <button data-k="fire" id="tFire" class="t-fire">발사</button>
     </div>
   </div>
+  <div id="angHint" class="ang-hint" hidden>↕ 위아래로 밀어서 각도 조절</div>
 
   <div id="over" class="over" hidden>
     <div class="over-card">
       <div id="overTitle" class="over-title"></div>
       <canvas id="overTank" class="over-tank"></canvas>
       <table class="rank"><thead><tr><th>순위</th><th></th><th>이름</th><th>입힌 피해</th><th>K.O.</th></tr></thead><tbody id="overRank"></tbody></table>
+      <div id="overCoins" class="over-coins" hidden></div>
       <div class="over-btns">
         <button id="btnAgain" class="btn big gold">🔁 한 판 더!</button>
         <button id="btnToRoom" class="btn">대기실로</button>
@@ -204,11 +220,42 @@
   </div>
 </main>
 
+<!-- ===== 탱크 자세히보기 ===== -->
+<div id="tankInfo" class="modal" hidden>
+  <div class="modal-card ti-card">
+    <div class="m-head"><span class="coin-pill">💰 <b id="tiCoins">0</b></span><button class="m-x" data-close title="닫기">✕</button></div>
+    <div class="ti-top">
+      <canvas id="tiCv" class="ti-cv"></canvas>
+      <div class="ti-hd">
+        <div id="tiName" class="ti-name"></div>
+        <div id="tiDesc" class="ti-desc"></div>
+        <div id="tiDiff" class="ti-diff"></div>
+      </div>
+    </div>
+    <div id="tiStats" class="ti-stats"></div>
+    <div class="sub">무기</div>
+    <div id="tiWeapons" class="ti-weapons"></div>
+    <div id="tiBtns" class="ti-btns"></div>
+    <button id="tiOff" class="ti-off">🔕 자세히보기 하루 동안 끄기</button>
+  </div>
+</div>
+
+<!-- ===== 상점 · 강화 ===== -->
+<div id="shop" class="modal" hidden>
+  <div class="modal-card shop-card">
+    <div class="m-head"><b class="m-title">🛒 상점</b><span class="coin-pill">💰 <b id="shopCoins">0</b></span><button class="m-x" data-close title="닫기">✕</button></div>
+    <div class="seg" id="shopTabs"><button data-v="tank" class="on">🚜 탱크 사기</button><button data-v="up">⚙ 강화</button></div>
+    <div id="shopBody" class="shop-body"></div>
+    <div id="shopTest" class="shop-test">🧪 테스트용(출시 전엔 숨김) <button id="tCoins" class="btn small">코인 +5,000</button><button id="tReset" class="btn small">처음 상태로</button></div>
+  </div>
+</div>
+
 <div id="toast" class="toast" hidden></div>
 
 <script src="vendor/mqtt.min.js"></script>
-<script src="engine.js?v=1.1.0"></script>
-<script src="draw.js?v=1.1.0"></script>
-<script src="app.js?v=1.1.0"></script>
+<script src="engine.js?v=1.2.0"></script>
+<script src="draw.js?v=1.2.0"></script>
+<script src="shop.js?v=1.2.0"></script>
+<script src="app.js?v=1.2.0"></script>
 </body>
 </html>
