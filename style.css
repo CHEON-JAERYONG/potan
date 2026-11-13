@@ -550,3 +550,32 @@ body { overscroll-behavior: none; }
 @media (orientation: landscape) and (max-height: 520px) {
   .wallet-bar { margin: -2px 0 8px; }
 }
+
+/* ================= v1.3: 맵 그림 카드 · 방장 자리 비움 · 새 방 따라가기 ================= */
+.set-map { margin-bottom: 6px; }
+.map-name { font-weight: normal; color: #ffe08a; font-size: 15px; }
+.map-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 12px; }
+.map-card { border: 2px solid transparent; background: rgba(255, 255, 255, .06); border-radius: 11px; padding: 3px 3px 2px; cursor: pointer; color: #dfe5ff; font: inherit; display: flex; flex-direction: column; align-items: stretch; gap: 2px; min-width: 0; }
+.map-card:hover { background: rgba(255, 255, 255, .12); }
+.map-card .mthumb { width: 100%; aspect-ratio: 16 / 9; height: auto; border-radius: 8px; display: block; background: linear-gradient(180deg, #4b6bb0, #7fa4d8); }
+.map-card .mthumb.rnd { display: grid; place-items: center; font-size: 24px; background: linear-gradient(135deg, #ff9f5a, #ff6fb3 35%, #59d6a8 65%, #4f7ff5); }
+.map-card span { font-size: 13px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+.map-card.sel { border-color: var(--gold); background: rgba(255, 203, 61, .16); box-shadow: 0 0 0 2px rgba(255, 203, 61, .2); }
+.map-card.sel span { color: #ffe45c; }
+.map-grid.locked .map-card { cursor: default; }
+.map-grid.locked .map-card:not(.sel) { opacity: .45; }
+.tag.rest { background: rgba(127, 208, 255, .2); color: #bfe6ff; }
+.take-btns { display: flex; gap: 8px; flex-wrap: wrap; width: 100%; }
+.host-away { border: 2px solid #ffd23a; background: rgba(60, 46, 10, .55); }
+.host-away .ha-t { font-size: 18px; }
+.host-away .ha-t b, .over-away b { color: #ffe45c; font-weight: normal; }
+.host-away .ha-s { color: var(--muted); font-size: 14px; margin: 4px 0 10px; }
+.ha-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.over-away { margin: 0 0 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; color: #ffe08a; }
+.msgs .go-b { margin-left: 4px; padding: 3px 9px; font-size: 13px; }
+.go-bar { position: fixed; left: 50%; bottom: calc(86px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 40; display: flex; align-items: center; gap: 8px; background: rgba(10, 14, 30, .95); border: 2px solid #ffd23a; border-radius: 14px; padding: 8px 10px 8px 14px; box-shadow: 0 8px 24px rgba(0, 0, 0, .5); max-width: calc(100vw - 24px); animation: toast .25s ease-out; }
+.go-bar span { font-size: 15px; min-width: 0; }
+@media (max-width: 680px) {
+  .map-card span { font-size: 12px; }
+  .ha-btns .btn, .take-btns .btn { flex: 1 1 auto; }
+}

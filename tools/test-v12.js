@@ -24,7 +24,7 @@ async function practice(p, theme, tank) {
   await p.fill('#nick', '포탄왕');
   if (tank) await p.click('.tank-card[data-k="' + tank + '"]');
   await p.click('#btnPractice'); await p.waitForTimeout(500);
-  await p.selectOption('#setTheme', theme); await p.waitForTimeout(200);
+  await p.click('#mapGrid .map-card[data-k="' + theme + '"]'); await p.waitForTimeout(200);
   await p.click('#btnStart'); await p.waitForTimeout(1500);
   return myTurn(p);
 }
@@ -84,7 +84,7 @@ async function practice(p, theme, tank) {
   console.log('[3] 게임: 강화 반영 · 예상 경로 · 점프 · 발사');
   await p.fill('#nick', '포탄왕');
   await p.click('#btnPractice'); await p.waitForTimeout(500);
-  await p.selectOption('#setTheme', 'canyon'); await p.click('#btnStart'); await p.waitForTimeout(1500);
+  await p.click('#mapGrid .map-card[data-k="canyon"]'); await p.click('#btnStart'); await p.waitForTimeout(1500);
   ok(await myTurn(p), '내 차례 옴');
   const t0 = await p.evaluate(() => { const t = __pt.world.tank(__pt.me.id); return { hp: t.hp, maxHp: t.maxHp, mv: t.moveMax, dm: t.dmgMul }; });
   ok(t0.maxHp === 137 && t0.mv === 96, '곰돌+강화 체력 137 · 이동 96 ' + JSON.stringify(t0));

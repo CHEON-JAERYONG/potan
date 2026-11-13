@@ -316,6 +316,60 @@
     drawTank(ctx, { type, color, facing: opts.facing || 1, angle: opts.angle == null ? 35 : opts.angle, time: opts.time || 0, seed: opts.seed || 0, active: opts.active });
   }
 
+  // 대기실 맵 고르기 카드용 작은 그림 (그리기 전용 — 게임 결과와 무관)
+  // 땅 모양은 그 맵의 예시(실제 판은 매번 조금씩 다르게 만들어짐). 맵마다 한 번만 만들어 기억해 둠.
+  const thumbs = {};
+  const TW = 240, TH = 128;
+  function makeThumb(theme) {
+    const th = E.THEMES[theme] || E.THEMES.meadow, HH = C.H, WW = Math.round(HH * TW / TH);
+    const T = new E.Terrain(WW, HH, 7919 + E.THEME_KEYS.indexOf(theme) * 104729, theme, true);
+    T.generate();
+    const cv = document.createElement('canvas'); cv.width = TW; cv.height = TH;
+    const ctx = cv.getContext('2d'), img = ctx.createImageData(TW, TH), px = img.data;
+    const rgb = h => E.hexRgb(h), mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+    const s0 = rgb(th.sky[0]), s1 = rgb(th.sky[1]), far = rgb(th.far), near = rgb(th.near), wat = rgb(th.water);
+    const g1 = rgb(th.grass), g2 = rgb(th.grass2), dirt = th.dirt.map(rgb), deep = rgb(th.deep);
+    const waterY = HH - (th.sea || 40), low = th.bgLow || 0;
+    for (let x = 0; x < TW; x++) {
+      const wx = Math.min(WW - 1, Math.floor((x + 0.5) * WW / TW));
+      const fy = TH * (0.5 + low / HH + 0.07 * Math.sin(x * 0.07 + 1.3) + 0.035 * Math.sin(x * 0.21));   // 먼 산
+      const ny = TH * (0.66 + low / HH + 0.05 * Math.sin(x * 0.05 + 4) + 0.03 * Math.sin(x * 0.17 + 2)); // 가까운 산
+      let run = 0;
+      for (let y = 0; y < TH; y++) {
+        const wy = Math.min(HH - 1, Math.floor((y + 0.5) * HH / TH));
+        let c;
+        if (T.mask[wy * WW + wx]) {
+          c = run < 1 ? g1 : run < 3 ? g2 : run < 9 ? dirt[0] : run < 18 ? dirt[1] : run < 30 ? dirt[2] : deep;
+          run++;
+        } else {
+          run = 0;
+          if (wy >= waterY) c = mix(wat, [0, 0, 0], Math.min(0.45, (wy - waterY) / 300));
+          else if (y > ny) c = mix(near, s1, 0.25);
+          else if (y > fy) c = mix(far, s1, 0.35);
+          else c = mix(s0, s1, y / TH);
+        }
+        const i = (y * TW + x) * 4;
+        px[i] = c[0]; px[i + 1] = c[1]; px[i + 2] = c[2]; px[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return cv;
+  }
+  // 그리면 true, 아직 화면에 안 보이는 캔버스면 false
+  function mapThumb(cv, theme) {
+    const w = cv.clientWidth, h = cv.clientHeight;
+    if (!w || !h) return false;
+    const dpr = Math.min(2, root.devicePixelRatio || 1), W = Math.round(w * dpr), H = Math.round(h * dpr);
+    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+    const src = thumbs[theme] || (thumbs[theme] = makeThumb(theme));
+    const ctx = cv.getContext('2d');
+    // 카드 비율에 맞춰 가운데를 잘라서 채움
+    const k = Math.max(W / TW, H / TH), sw = W / k, sh = H / k;
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(src, (TW - sw) / 2, TH - sh, sw, sh, 0, 0, W, H);
+    return true;
+  }
+
   /* ================= 렌더러 ================= */
   class Renderer {
     constructor(canvas, opt) {
@@ -931,5 +985,5 @@
     }
   }
 
-  root.Draw = { drawTank, preview, Renderer, shade, rgba, starPath };
+  root.Draw = { drawTank, preview, mapThumb, Renderer, shade, rgba, starPath };
 })(window);

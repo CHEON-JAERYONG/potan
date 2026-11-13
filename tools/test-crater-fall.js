@@ -20,7 +20,7 @@ const SP = process.argv[2] || require('path').join(__dirname, 'shots'), THEME = 
   await p.click('.tank-card[data-k="boom"]');
   await p.click('#btnPractice');
   await p.waitForTimeout(600);
-  await p.selectOption('#setTheme', THEME);
+  await p.click('#mapGrid .map-card[data-k="' + THEME + '"]');
   await p.waitForTimeout(300);
   await p.click('#btnStart');
   await p.waitForTimeout(2500);

@@ -3,7 +3,7 @@
 (function () {
   'use strict';
   const E = window.Engine, D = window.Draw, C = E.C;
-  const VERSION = '1.2.2';
+  const VERSION = '1.3.0';
   const TOPIC_ROOT = 'potan-battle/v1/';
   const BROKERS = [
     { url: 'wss://broker.emqx.io:8084/mqtt' },
@@ -159,6 +159,31 @@
 
   const isHost = () => !!R && R.host === me.id;
   const present = id => id === me.id || (Date.now() - (lastSeen[id] || 0) < OFF_MS);
+
+  // ---- 자리 비움: 마지막으로 화면·키보드를 만진 뒤 몇 초 지났는지(심장박동에 실어 보냄) ----
+  const AWAY_S = 90;                 // 이만큼 아무것도 안 만지면 '자리 비움'
+  let lastAct = Date.now(), backSent = 0;
+  const idleInfo = {};               // 아이디 → { idle: 초, at: 받은 때 }
+  const myIdle = () => Math.min(99999, Math.round((Date.now() - lastAct) / 1000));
+  function idleSec(id) {
+    if (id === me.id) return myIdle();
+    const v = idleInfo[id];
+    return v ? v.idle + (Date.now() - v.at) / 1000 : 0;
+  }
+  // 방장이 접속은 돼 있는데(창은 켜져 있는데) 한동안 아무것도 안 하는 중
+  const hostAway = () => !!(R && R.online && R.host && !isHost() && present(R.host) && idleSec(R.host) >= AWAY_S);
+  function markAct(e) {
+    if (e && e.type === 'mousemove' && Date.now() - lastAct < 1000) return;
+    lastAct = Date.now();
+    const mine = R && R.players && R.players.find(p => p.id === me.id);
+    if (mine && mine.rest && Date.now() - backSent > 2000) {
+      backSent = Date.now();
+      if (isHost()) { mine.rest = 0; pushRoom(); }
+      else if (R.online) emit({ t: 'upd', p: { rest: 0 } }, false);
+      toast('다시 왔어요! 다음 판부터 같이 해요');
+    }
+  }
+  for (const ev of ['pointerdown', 'keydown', 'touchstart', 'wheel', 'mousemove']) document.addEventListener(ev, markAct, { capture: true, passive: true });
   const curTank = () => (world && G ? world.tank(G.order[G.turnIdx]) : null);
   const isMine = t => !!t && !t.bot && t.id === me.id;
   const controlsLocal = t => !!t && (isMine(t) || (t.bot && isHost()));
@@ -274,10 +299,11 @@
     saveMe();
     return true;
   }
-  function createRoom(online) {
+  function createRoom(online, keep, forceCode) {
     if (!checkName()) return;
-    const code = online ? rid(5) : 'practice';
-    R = { code, online, host: me.id, seq: 1, phase: 'lobby', settings: { theme: 'random', mode: 'ffa', time: 30 }, players: [myPlayer()] };
+    const code = online ? (forceCode || rid(5)) : 'practice';
+    const settings = Object.assign({ theme: 'random', mode: 'ffa', time: 30 }, keep || {});
+    R = { code, online, host: me.id, seq: 1, phase: 'lobby', settings, players: [myPlayer()] };
     if (!online) R.players.push(makeBot('normal'));
     if (online) { history.replaceState(null, '', location.pathname + '?r=' + code); Net.connect(code); ss.set('pt.room', code); }
     joinAt = Date.now();
@@ -289,6 +315,8 @@
     if (!checkName()) return;
     R = { code, online: true, host: null, seq: 0, phase: 'lobby', settings: { theme: 'random', mode: 'ffa', time: 30 }, players: [] };
     joinAt = Date.now();
+    $('joinWaitTxt').textContent = '방에 연결하는 중…';
+    $('takeBtns').hidden = true;
     roomMsgs.length = 0; $('roomMsgs').innerHTML = '';
     Net.connect(code);
     ss.set('pt.room', code);
@@ -303,12 +331,44 @@
   }
   function leaveRoom() {
     if (R && R.online) { try { Net.send({ t: 'bye', from: me.id, mid: rid(10) }, 0); } catch (e) { } }
-    setTimeout(() => Net.close(), 150);
+    // 지금 연결만 조금 뒤에 닫음(바로 새 방에 들어가도 새 연결은 안 끊기게)
+    const old = Net.clients; Net.clients = [];
+    setTimeout(() => { for (const c of old) if (c) { try { c.end(true); } catch (e) { } } }, 400);
     R = null; G = null; world = null; sim = null; anim = null; phase = 'none'; bot = null;
     Sfx.charge(-1);
+    goWant = null; $('goBar').hidden = true;
     history.replaceState(null, '', location.pathname);
     ss.set('pt.room', '');
     showHome();
+  }
+  // 방장이 자리를 비웠을 때: 내가 방장이 됨. 원래 방장은 '쉬는 중'(다음 판에서 빠짐, 돌아와서 화면을 누르면 다시 참여)
+  function claimHost() {
+    if (!R || !R.online || isHost()) return false;
+    if (!hostAway()) { toast(present(R.host) ? '방장이 돌아왔어요!' : '잠시 뒤 자동으로 방장이 정해져요'); renderAway(); return false; }
+    const old = R.players.find(p => p.id === R.host);
+    if (old && !old.bot) old.rest = 1;
+    R.host = me.id; R.seq = (R.seq || 0) + 100;
+    pushRoom();
+    Sfx.play('click');
+    toast('👑 이제 내가 방장이에요!');
+    sysMsg(me.name + ' 님이 방장이 됐어요' + (old ? ' — ' + old.name + ' 님은 쉬는 중(돌아오면 다음 판부터 같이 해요)' : ''));
+    renderAway();
+    return true;
+  }
+  // 지금 방에서 나와 내 방을 새로 만듦 — 같이 있던 사람들에게는 '따라가기' 버튼이 뜸
+  function newRoomHere() {
+    if (!checkName()) return;
+    const keep = R && R.settings ? Object.assign({}, R.settings) : null, code = rid(5);
+    if (R && R.online) emit({ t: 'chat', name: me.name, text: '새 방을 만들었어요! 같이 해요', go: code }, false);
+    leaveRoom();
+    createRoom(true, keep, code);
+  }
+  function followRoom(code) {
+    if (!code || (R && R.code === code)) return;
+    $('goBar').hidden = true;
+    leaveRoom();
+    history.replaceState(null, '', location.pathname + '?r=' + code);
+    joinRoom(code);
   }
   function pushRoom() {
     if (!R) return;
@@ -349,7 +409,13 @@
     }
   }
   function onUpd(d) {
-    if (!isHost() || R.phase !== 'lobby' || !d.p) return;
+    if (!isHost() || !d.p) return;
+    if ('rest' in d.p) {
+      const q = R.players.find(x => x.id === d.from);
+      if (q && q.rest && !d.p.rest) { q.rest = 0; sysMsg(q.name + ' 님이 돌아왔어요 — 다음 판부터 같이 해요'); pushRoom(); }
+      return;
+    }
+    if (R.phase !== 'lobby') return;
     const p = R.players.find(x => x.id === d.from);
     if (!p) { onHello(d); return; }
     if (d.p.name) p.name = cleanName(d.p.name) || p.name;
@@ -364,13 +430,25 @@
     if (from && from !== r.host) return;                 // 방 정보는 방장 본인만 보냄
     if (isHost()) {
       if (r.host === me.id) return;
-      if (r.seq <= R.seq) { pushRoom(); return; }        // 내가 더 최신 방장
+      // 내가 더 최신 방장(같은 번호면 아이디가 작은 쪽이 방장 — 둘이 서로 우기며 끝없이 주고받지 않게)
+      if (r.seq < R.seq || (r.seq === R.seq && r.host > me.id)) { pushRoom(); return; }
     } else if (R.host && r.seq < R.seq) return;          // 옛날 정보
     const before = R.players.map(p => ({ id: p.id, name: p.name, bot: p.bot }));
-    const prevPhase = R.phase, hadHost = !!R.host;
+    const prevPhase = R.phase, hadHost = !!R.host, prevHost = R.host;
+    const meB = R.players.find(p => p.id === me.id), wasRest = !!(meB && meB.rest);
     R = Object.assign({}, r, { online: true });
-    if (hadHost) diffPlayers(before);
-    else { $('joinWait').hidden = true; sysMsg('방에 들어왔어요!'); }
+    if (hadHost) {
+      diffPlayers(before);
+      if (prevHost !== R.host) {
+        const np = R.players.find(p => p.id === R.host);
+        sysMsg('👑 ' + (np ? np.name : '다른 사람') + ' 님이 방장이 됐어요');
+      }
+    } else { $('joinWait').hidden = true; sysMsg('방에 들어왔어요!'); }
+    const meA = R.players.find(p => p.id === me.id);
+    if (meA && meA.rest && !wasRest) {
+      sysMsg('💤 자리를 비운 사이에 방장이 바뀌었어요. 화면을 아무 곳이나 누르면 다음 판부터 다시 같이 해요');
+      backSent = 0;
+    }
     if (R.phase === 'lobby') {
       if (!R.players.some(p => p.id === me.id)) sendHello();
       if (screen !== 'room') { showRoom(); if (prevPhase === 'game') toast('대기실로 돌아왔어요'); }
@@ -402,7 +480,7 @@
     const ul = $('pList');
     $('pCount').textContent = R.players.length + ' / ' + MAX_PLAYERS;
     const team = R.settings.mode === 'team';
-    const sig = JSON.stringify([R.host, team, waitingSig(), R.players.map(p => [p.id, p.name, p.tank, p.color, p.team, p.bot || present(p.id), p.up])]);
+    const sig = JSON.stringify([R.host, team, waitingSig(), R.players.map(p => [p.id, p.name, p.tank, p.color, p.team, p.bot || present(p.id), p.up, !!p.rest, !p.bot && idleSec(p.id) >= AWAY_S])]);
     if (ul.dataset.sig !== sig) { ul.dataset.sig = sig; ul.innerHTML = ''; }
     for (const p of (ul.children.length ? [] : R.players)) {
       const li = document.createElement('li');
@@ -412,6 +490,7 @@
       const ups = p.up ? E.UPG.keys.reduce((a, k) => a + (p.up[k] | 0), 0) : 0;
       li.innerHTML = '<canvas></canvas><div class="pn"><b>' + esc(p.name) + '</b>' +
         (p.id === R.host ? '<span class="tag host">👑 방장</span>' : '') + (p.id === me.id ? '<span class="tag">나</span>' : '') +
+        (p.rest ? '<span class="tag rest">💤 쉬는 중 · 이번 판 빠짐</span>' : (!p.bot && p.id !== me.id && present(p.id) && idleSec(p.id) >= AWAY_S ? '<span class="tag rest">💤 자리 비움</span>' : '')) +
         '<small>' + esc(tk.name) + ' · ' + esc(tk.role) + (ups ? ' · ⚙강화 +' + ups : '') + (p.bot ? ' · ' + LEVEL_TXT[p.level] : '') + '</small></div>' +
         (team ? '<button class="team-b t' + p.team + '">' + (p.team === 1 ? '🔴 레드' : '🔵 블루') + '</button>' : '') +
         (p.bot ? '' : '<span class="dot' + (on ? '' : ' off') + '" title="' + (on ? '접속 중' : '연결 끊김') + '"></span>') +
@@ -434,11 +513,7 @@
     // 설정
     $('botRow').hidden = !host;
     $('setHint').textContent = host ? '' : '(방장만 바꿀 수 있어요)';
-    const sel = $('setTheme');
-    if (!sel.options.length) {
-      sel.innerHTML = '<option value="random">🎲 랜덤</option>' + E.THEME_KEYS.map(k => '<option value="' + k + '">' + E.THEMES[k].name + '</option>').join('');
-    }
-    sel.value = R.settings.theme; sel.disabled = !host;
+    renderMaps(host);
     segSet('setMode', R.settings.mode, !host);
     segSet('setTime', String(R.settings.time), !host);
     const mine = R.players.find(p => p.id === me.id);
@@ -447,8 +522,62 @@
     $('btnStart').hidden = !host;
     $('waitHost').hidden = host;
     $('waitHost').textContent = R.phase === 'game' ? '게임이 진행 중이에요 — 곧 관전 화면으로 넘어가요…' : '방장이 게임을 시작하길 기다리는 중…';
-    $('btnStart').disabled = R.players.length < 2;
-    $('btnStart').textContent = R.players.length < 2 ? '친구나 컴퓨터가 들어오면 시작할 수 있어요' : '🔥 게임 시작! (' + R.players.length + '명)';
+    const nPlay = R.players.filter(p => !p.rest).length;
+    $('btnStart').disabled = nPlay < 2;
+    $('btnStart').textContent = nPlay < 2 ? '친구나 컴퓨터가 들어오면 시작할 수 있어요' : '🔥 게임 시작! (' + nPlay + '명)';
+    renderAway();
+  }
+  // 맵 고르기 — 그림 카드(방장만 누를 수 있음). 예전 드롭다운은 휴대폰에서 '랜덤'만 나오고 고르기 어려웠음(대기실을 2.5초마다 다시 그릴 때 값도 덮어썼음)
+  function renderMaps(host) {
+    const g = $('mapGrid');
+    if (!g.children.length) {
+      for (const k of ['random'].concat(E.THEME_KEYS)) {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'map-card'; b.dataset.k = k;
+        b.innerHTML = (k === 'random' ? '<div class="mthumb rnd">🎲</div>' : '<canvas class="mthumb"></canvas>') + '<span>' + (k === 'random' ? '랜덤' : esc(E.THEMES[k].name)) + '</span>';
+        b.onclick = () => {
+          if (!R || !isHost()) { toast('맵은 방장만 바꿀 수 있어요'); return; }
+          if (R.settings.theme === k) return;
+          Sfx.play('click'); R.settings.theme = k; pushRoom();
+        };
+        g.appendChild(b);
+      }
+    }
+    const cur = E.THEMES[R.settings.theme] ? R.settings.theme : 'random';
+    g.classList.toggle('locked', !host);
+    for (const b of g.children) b.classList.toggle('sel', b.dataset.k === cur);
+    $('mapName').textContent = cur === 'random' ? '🎲 랜덤 — 시작할 때 정해져요' : E.THEMES[cur].name;
+    drawMapThumbs();
+  }
+  let thumbQ = null, overAt = 0;
+  function drawMapThumbs() {
+    if (thumbQ) return;
+    const todo = Array.from($('mapGrid').querySelectorAll('canvas.mthumb')).filter(c => c.clientWidth && c.dataset.w !== String(c.clientWidth));
+    if (!todo.length) return;
+    thumbQ = todo;
+    const step = () => {   // 한 프레임에 한 장씩 — 휴대폰에서도 버벅이지 않게
+      if (screen !== 'room') { thumbQ = null; return; }
+      const cv = thumbQ.shift();
+      try { if (cv && D.mapThumb(cv, cv.parentNode.dataset.k)) cv.dataset.w = String(cv.clientWidth); } catch (e) { console.warn('thumb', e); }
+      if (thumbQ.length) requestAnimationFrame(step); else thumbQ = null;
+    };
+    requestAnimationFrame(step);
+  }
+  // 방장이 자리를 비웠으면 안내 + '내가 방장 하기'
+  function renderAway() {
+    if (!R) return;
+    const away = hostAway(), hp = away ? R.players.find(p => p.id === R.host) : null;
+    $('hostAway').hidden = !(away && screen === 'room' && R.phase === 'lobby');
+    $('hostAwayName').textContent = hp ? hp.name : '';
+    if (screen === 'game' && phase === 'over') renderOverBtns();
+  }
+  function renderOverBtns() {
+    // 판이 끝난 직후엔 방장이 그냥 구경하다 안 만졌을 수도 있으니 15초는 기다려 줌
+    const host = isHost(), away = !host && hostAway() && Date.now() - overAt > 15000, hp = away ? R.players.find(p => p.id === R.host) : null;
+    $('btnAgain').hidden = !host; $('btnToRoom').hidden = !host;
+    $('overWait').textContent = host || away ? '' : '방장이 다음 판을 시작하면 자동으로 넘어가요';
+    $('overAway').hidden = !away;
+    $('overAwayName').textContent = hp ? hp.name : '';
   }
   function waitingSig() { return R && R.online && !R.host ? 'w' : ''; }
   function segSet(id, v, locked) {
@@ -548,9 +677,20 @@
     if (d.sys) { sysMsg(text); return; }
     const p = R && R.players.find(x => x.id === d.from);
     const name = cleanName(d.name) || (p && p.name) || '손님';
+    const go = typeof d.go === 'string' && /^[a-z0-9]{3,12}$/.test(d.go) && d.from !== me.id ? d.go : '';
     const html = '<b>' + esc(name) + '</b> ' + esc(text);
-    addMsgRoom(html); addMsgGame(html);
+    addMsgRoom(html + (go ? ' <button class="btn small gold go-b" data-go="' + go + '">🚀 따라가기</button>' : ''));
+    addMsgGame(html + (go ? ' (판이 끝나면 따라갈 수 있어요)' : ''));
+    if (go) { goWant = { name, go }; showGo(); }
     if (d.from !== me.id) Sfx.play('chat');
+  }
+  // 다른 사람이 새 방을 만들었을 때 '따라가기' 줄 — 게임 중이면 판이 끝난 뒤에 띄움
+  let goWant = null;
+  function showGo() {
+    if (!goWant || (screen === 'game' && phase !== 'over')) return;
+    $('goTxt').textContent = '🚀 ' + goWant.name + ' 님이 새 방을 만들었어요!';
+    $('goBar').dataset.go = goWant.go; $('goBar').hidden = false;
+    goWant = null;
   }
   function sendChat(text) {
     text = String(text || '').trim().slice(0, 60);
@@ -561,7 +701,9 @@
   /* ================= 게임 시작 · 동기화 ================= */
   function startGame() {
     if (!isHost()) return;
-    const ps = R.players.slice();
+    const mine = R.players.find(p => p.id === me.id);
+    if (mine) mine.rest = 0;                       // 시작 버튼을 누른 방장은 당연히 참여
+    const ps = R.players.filter(p => !p.rest);     // 💤 쉬는 사람은 이번 판 구경
     if (ps.length < 2) { toast('2명 이상이어야 시작할 수 있어요 (컴퓨터 추가 가능)'); return; }
     const team = R.settings.mode === 'team';
     if (team) {
@@ -604,7 +746,8 @@
     R = Object.assign({}, d.room, { online: R.online });
     loadGame(d.game, null);
     enterGame();
-    sysMsg('게임 시작! 행운을 빌어요 💣');
+    const th = E.THEMES[G.init.theme];
+    sysMsg('게임 시작! 맵: ' + (th ? th.name : '?') + ' — 행운을 빌어요 💣');
     beginTurn();
   }
   function loadGame(g, snap) {
@@ -1122,9 +1265,9 @@
       tb.appendChild(tr);
       D.preview(tr.querySelector('canvas'), t.type, t.alive ? t.color : '#777', { angle: 30, zoom: 46 });
     });
-    const host = isHost();
-    $('btnAgain').hidden = !host; $('btnToRoom').hidden = !host;
-    $('overWait').textContent = host ? '' : '방장이 다음 판을 시작하면 자동으로 넘어가요';
+    overAt = Date.now();
+    renderOverBtns();
+    showGo();
     $('over').hidden = false;
     const inGame = world.tanks.some(t => t.id === me.id);
     if (inGame) Sfx.play(iWon ? 'win' : 'lose');
@@ -1153,6 +1296,7 @@
   }
   function showRoom() {
     showScreen('room');
+    showGo();
     G = null; world = null; sim = null; anim = null; phase = 'none'; bot = null;
     Sfx.charge(-1);
     buildPickers();
@@ -1271,7 +1415,7 @@
   // 심장박동 · 방장 승계 · 동기화 확인
   setInterval(() => {
     if (!R || !R.online) return;
-    const hb = { t: 'hb' };
+    const hb = { t: 'hb', idle: myIdle() };
     if (isHost()) {
       hb.room = R;
       if (G && world && phase === 'aim') { hb.gid = G.gid; hb.tn = G.turnNo; hb.ck = checksum(); }
@@ -1279,13 +1423,14 @@
     }
     emit(hb, false, 0);
     if (screen === 'room') renderRoom();
+    else renderAway();
   }, BEAT_MS);
   setInterval(() => {
     if (!R || !R.online) return;
     // 방 정보를 못 받으면 안내
     if (!R.host && Date.now() - joinAt > 7000) {
-      $('joinWaitTxt').textContent = '방장을 찾지 못했어요. 방장이 나갔거나 링크가 잘못됐을 수 있어요.';
-      $('btnTakeRoom').hidden = false;
+      $('joinWaitTxt').textContent = '방장이 지금 없어요 (나갔거나 잠깐 자리를 비웠어요). 내가 방장이 되면 이 링크로 친구들이 그대로 들어올 수 있어요.';
+      $('takeBtns').hidden = false;
     }
     if (!R.host && Date.now() - lastHello > 3000) sendHello(true);
     // 방장이 사라지면 가장 먼저 들어온 사람이 이어받음
@@ -1300,6 +1445,7 @@
     }
   }, 1000);
   function onBeat(d) {
+    if (typeof d.idle === 'number') idleInfo[d.from] = { idle: d.idle, at: Date.now() };
     if (d.room && d.room.host === d.from) onRoom(d.room, d.from);
     if (isHost() || !R || d.from !== R.host || !d.gid) return;
     if (!G || G.gid !== d.gid) { if (R.phase === 'game') requestSync(); return; }
@@ -1446,7 +1592,15 @@
     const code = (new URLSearchParams(location.search).get('r') || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12);
     if (code) joinRoom(code);
   };
-  $('btnTakeRoom').onclick = () => { $('btnTakeRoom').hidden = true; takeRoom(); };
+  $('btnTakeRoom').onclick = () => { $('takeBtns').hidden = true; takeRoom(); };
+  $('btnNewRoomW').onclick = () => newRoomHere();
+  $('btnNewRoom').onclick = () => newRoomHere();
+  $('btnNewRoomOver').onclick = () => newRoomHere();
+  $('btnClaim').onclick = () => claimHost();
+  $('btnClaimOver').onclick = () => { if (claimHost()) $('btnAgain').onclick(); };
+  $('roomMsgs').addEventListener('click', e => { const b = e.target.closest('.go-b'); if (b) followRoom(b.dataset.go); });
+  $('goYes').onclick = () => followRoom($('goBar').dataset.go);
+  $('goNo').onclick = () => { $('goBar').hidden = true; };
   $('btnLeaveRoom').onclick = () => leaveRoom();
   $('btnCopy').onclick = () => {
     const v = $('shareUrl').value;
@@ -1462,7 +1616,6 @@
     if (R.players.length >= MAX_PLAYERS) { toast('최대 8명까지예요'); return; }
     R.players.push(makeBot(b.dataset.bot)); pushRoom();
   };
-  $('setTheme').onchange = () => { if (!isHost()) return; R.settings.theme = $('setTheme').value; pushRoom(); };
   for (const b of $('setMode').querySelectorAll('button')) b.onclick = () => { if (!isHost()) return; R.settings.mode = b.dataset.v; pushRoom(); };
   for (const b of $('setTime').querySelectorAll('button')) b.onclick = () => { if (!isHost()) return; R.settings.time = +b.dataset.v; pushRoom(); };
   for (const b of $('myTeam').querySelectorAll('button')) b.onclick = () => setMyTeam(+b.dataset.v);
@@ -1503,5 +1656,6 @@
     if (code && ss.get('pt.room') === code && me.name) joinRoom(code);
   }
   requestAnimationFrame(loop);
-  window.__pt = { me, get R() { return R; }, get G() { return G; }, get world() { return world; }, get phase() { return phase; }, get aim() { return aim; }, get rd() { return rd; }, keys, fireNow, startCharge, useItem, selectWeapon, doJump, nudgeAngle, viewState, Net, Wallet, Shop };
+  window.__pt = { me, get R() { return R; }, get G() { return G; }, get world() { return world; }, get phase() { return phase; }, get aim() { return aim; }, get rd() { return rd; }, keys, fireNow, startCharge, useItem, selectWeapon, doJump, nudgeAngle, viewState, Net, Wallet, Shop,
+    setIdle(sec) { lastAct = Date.now() - sec * 1000; }, idleSec };   // setIdle: 테스트용(자리 비움 흉내)
 })();

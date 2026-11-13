@@ -27,6 +27,7 @@ const aimFire = p => p.evaluate(() => { const G = __pt.G, w = __pt.world, t = w.
   for (let i = 0; i < 40; i++) { if (await A.evaluate(() => __pt.R.players.length) >= 2) break; await A.waitForTimeout(300); }
   await A.click('#btnStart');
   let a = await waitFor(A, s => s.phase === 'aim');
+  await waitFor(B, s => s.phase === 'aim');   // B도 게임을 받은 뒤에 쏘기(B 차례가 먼저면 B 화면에 아직 게임이 없을 수 있음)
   await aimFire(a.cur === a.me ? A : (B));
   a = await waitFor(A, s => s.phase === 'aim' && s.turn === 2, 30000);
   let bb = await waitFor(B, s => s.phase === 'aim' && s.turn === 2, 30000);
